@@ -3,9 +3,7 @@
 use App\Http\Controllers\ImageController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    return view('welcome');
-})->name('home');
+Route::redirect('/', '/admin')->name('home');
 
 Route::get('/{locale}', function ($locale) {
     if (in_array($locale, config('app.supported_locales'))) {

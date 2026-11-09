@@ -6,8 +6,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-it('returns a successful response', function () {
-    $this->get('/')->assertOk();
+it('redirects the home page to the admin panel', function () {
+    $this->get('/')->assertRedirect('/admin');
 });
 
 it('stores a supported locale in the session and redirects back', function () {
