@@ -3,6 +3,7 @@
 use App\Filament\Pages\Contact;
 use App\Filament\Pages\General;
 use App\Filament\Resources\Admins\Pages\CreateAdmin;
+use App\Filament\Resources\DocumentLayouts\Pages\CreateDocumentLayout;
 use App\Filament\Resources\DocumentLayouts\Pages\ListDocumentLayouts;
 use App\Filament\Resources\Documents\DocumentResource;
 use App\Filament\Resources\Documents\Pages\EditDocument;
@@ -23,6 +24,7 @@ use Filament\Auth\Pages\Login;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Jacobtims\FilamentLogger\Resources\ActivityResource\Pages\ListActivities;
 use Livewire\Livewire;
@@ -207,24 +209,80 @@ test('super admins can create an admin with a role', function () {
     expect(Admin::firstWhere('email', 'second@example.com')->hasRole('panel_user'))->toBeTrue();
 });
 
-test('only one layout of each type stays default', function () {
-    $first = DocumentLayout::create(['type' => 'header', 'name' => 'A', 'is_default' => true]);
-    $footer = DocumentLayout::create(['type' => 'footer', 'name' => 'F', 'is_default' => true]);
-    $second = DocumentLayout::create(['type' => 'header', 'name' => 'B', 'is_default' => true]);
+test('only one letterhead stays default', function () {
+    $first = DocumentLayout::create(['name' => 'A', 'is_default' => true]);
+    $second = DocumentLayout::create(['name' => 'B', 'is_default' => true]);
 
     expect($first->refresh()->is_default)->toBeFalse()
         ->and($second->refresh()->is_default)->toBeTrue()
-        ->and($footer->refresh()->is_default)->toBeTrue()
-        ->and(DocumentLayout::defaultId('header'))->toBe($second->id);
+        ->and(DocumentLayout::defaultId())->toBe($second->id);
+});
+
+test('a letterhead is saved with header and footer from one form', function () {
+    $this->actingAs(superAdmin(), 'admin');
+
+    Livewire::test(CreateDocumentLayout::class)
+        ->fillForm([
+            'name' => 'ACME',
+            'header_content' => '<p>Head</p>',
+            'footer_content' => '<p>Foot</p>',
+            'logo_position' => 'right',
+            'accent_color' => '#112233',
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $letterhead = DocumentLayout::firstWhere('name', 'ACME');
+
+    expect($letterhead->header_content)->toContain('Head')
+        ->and($letterhead->footer_content)->toContain('Foot')
+        ->and($letterhead->logo_position)->toBe('right')
+        ->and($letterhead->accent_color)->toBe('#112233');
+});
+
+test('migration merges header and footer pairs without changing any document', function () {
+    $migration = require database_path('migrations/2026_11_09_000002_merge_headers_and_footers_into_letterheads.php');
+    $migration->down();
+
+    $layout = fn (string $type, string $name) => DB::table('document_layouts')->insertGetId([
+        'type' => $type, 'name' => $name, 'content' => $name, 'logo_position' => 'left',
+    ]);
+    $header = $layout('header', 'H');
+    $footerOne = $layout('footer', 'F1');
+    $footerTwo = $layout('footer', 'F2');
+    $layout('footer', 'Unused');
+
+    $document = fn (string $title, ?int $h, ?int $f) => DB::table('documents')->insertGetId([
+        'title' => $title, 'header_id' => $h, 'footer_id' => $f,
+    ]);
+    $first = $document('First', $header, $footerOne);
+    $sameFooter = $document('Same', $header, $footerOne);
+    $otherFooter = $document('Other', $header, $footerTwo);
+    $footerOnly = $document('Only', null, $footerTwo);
+    $none = $document('None', null, null);
+    $template = DB::table('document_templates')->insertGetId(['name' => 'T', 'header_id' => $header, 'footer_id' => $footerTwo]);
+
+    $migration->up();
+
+    $letterhead = fn (int $id) => Document::find($id)->layout;
+
+    expect($letterhead($first)->only('header_content', 'footer_content'))->toBe(['header_content' => 'H', 'footer_content' => 'F1'])
+        ->and($letterhead($sameFooter)->id)->toBe($letterhead($first)->id)
+        ->and($letterhead($otherFooter)->only('header_content', 'footer_content'))->toBe(['header_content' => 'H', 'footer_content' => 'F2'])
+        ->and($letterhead($footerOnly)->only('header_content', 'footer_content'))->toBe(['header_content' => null, 'footer_content' => 'F2'])
+        ->and($letterhead($none))->toBeNull()
+        ->and(DB::table('document_templates')->find($template)->layout_id)->toBe($letterhead($otherFooter)->id)
+        ->and(DocumentLayout::where('footer_content', 'Unused')->whereNull('header_content')->exists())->toBeTrue()
+        ->and(DocumentLayout::orderBy('name')->pluck('name')->all())->toBe(['F2', 'H', 'H + F2', 'Unused']);
 });
 
 test('a document from a template copies its content once', function () {
     $this->actingAs(superAdmin(), 'admin');
-    $header = DocumentLayout::create(['type' => 'header', 'name' => 'H']);
+    $letterhead = DocumentLayout::create(['name' => 'H']);
     $template = DocumentTemplate::create([
         'name' => 'Letter',
         'language' => 'ar',
-        'header_id' => $header->id,
+        'layout_id' => $letterhead->id,
         'body' => '<p>{{client}}</p>',
         'stamp_mode' => 'none',
     ]);
@@ -236,7 +294,7 @@ test('a document from a template copies its content once', function () {
     $document = Document::firstWhere('title', 'For ACME');
 
     expect($document->language)->toBe('ar')
-        ->and($document->header_id)->toBe($header->id)
+        ->and($document->layout_id)->toBe($letterhead->id)
         ->and($document->stamp_mode)->toBe('none')
         ->and($document->placeholder_values)->toBe(['client' => '']);
 
@@ -273,7 +331,7 @@ test('bulk delete removes drafts but never finalized documents', function () {
 test('templates and layouts can be bulk deleted', function () {
     $this->actingAs(superAdmin(), 'admin');
     $templates = collect(['A', 'B'])->map(fn (string $name) => DocumentTemplate::create(['name' => $name]));
-    $layouts = collect(['A', 'B'])->map(fn (string $name) => DocumentLayout::create(['type' => 'header', 'name' => $name]));
+    $layouts = collect(['A', 'B'])->map(fn (string $name) => DocumentLayout::create(['name' => $name]));
 
     Livewire::test(ListDocumentTemplates::class)->callTableBulkAction('delete', $templates);
     Livewire::test(ListDocumentLayouts::class)->callTableBulkAction('delete', $layouts);

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
+/** A letterhead: the header and footer that go together on a document. */
 class DocumentLayout extends Model
 {
     protected $guarded = ['id'];
@@ -13,21 +14,21 @@ class DocumentLayout extends Model
         return ['is_default' => 'boolean'];
     }
 
-    public static function options(string $type): array
+    public static function options(): array
     {
-        return static::where('type', $type)->orderBy('name')->pluck('name', 'id')->all();
+        return static::orderBy('name')->pluck('name', 'id')->all();
     }
 
-    public static function defaultId(string $type): ?int
+    public static function defaultId(): ?int
     {
-        return static::where('type', $type)->where('is_default', true)->value('id');
+        return static::where('is_default', true)->value('id');
     }
 
     protected static function booted(): void
     {
         static::saved(function (self $layout) {
             if ($layout->is_default) {
-                static::where('type', $layout->type)->whereKeyNot($layout->id)->update(['is_default' => false]);
+                static::whereKeyNot($layout->id)->update(['is_default' => false]);
             }
         });
     }

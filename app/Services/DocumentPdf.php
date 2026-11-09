@@ -40,8 +40,8 @@ class DocumentPdf
         $direction = $document->language === 'ar' ? 'rtl' : 'ltr';
 
         // Goes straight into CSS, so only a plain hex colour may pass.
-        $accent = preg_match('/^#[0-9a-f]{6}$/i', (string) $document->header?->accent_color)
-            ? $document->header->accent_color
+        $accent = preg_match('/^#[0-9a-f]{6}$/i', (string) $document->layout?->accent_color)
+            ? $document->layout->accent_color
             : '#1f3a5f';
 
         $mpdf->SetDirectionality($direction);
@@ -79,13 +79,14 @@ class DocumentPdf
 
         $mpdf->WriteHTML(view('pdf.styles', compact('accent', 'direction'))->render(), HTMLParserMode::HEADER_CSS);
         $mpdf->SetHTMLHeader(view('pdf.header', [
-            'content' => $this->content($document, $document->header?->content),
+            'content' => $this->content($document, $document->layout?->header_content),
+            'rightContent' => $this->content($document, $document->layout?->header_right_content),
             'logo' => $has('logo'),
-            'position' => $document->header?->logo_position ?? 'left',
+            'position' => $document->layout?->logo_position ?? 'left',
             'direction' => $direction,
         ])->render());
         $mpdf->SetHTMLFooter(view('pdf.footer', [
-            'content' => $this->content($document, $document->footer?->content),
+            'content' => $this->content($document, $document->layout?->footer_content),
             'pageNumber' => trans('Page :x of :y', ['x' => '{PAGENO}', 'y' => '{nbpg}'], $document->language),
             'direction' => $direction,
         ])->render());
@@ -166,8 +167,8 @@ class DocumentPdf
 
     private function defaultImage(Document $document, string $name): array
     {
-        if ($name === 'logo' && filled($document->header?->logo)) {
-            return ['local', $document->header->logo];
+        if ($name === 'logo' && filled($document->layout?->logo)) {
+            return ['local', $document->layout->logo];
         }
 
         // The site logo is public because the panel shows it. Signature and stamp stay private.

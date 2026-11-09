@@ -23,20 +23,20 @@ function tableHtml(int $rows, string $text = 'Row'): string
 }
 
 test('placeholders are detected on save and keep their values', function () {
-    $header = DocumentLayout::create(['type' => 'header', 'name' => 'H', 'content' => '<p>{{ company }}</p>']);
+    $letterhead = DocumentLayout::create(['name' => 'H', 'header_content' => '<p>{{ company }}</p>', 'footer_content' => '<p>{{ phone }}</p>']);
 
     $document = Document::create([
         'title' => 'T',
-        'header_id' => $header->id,
+        'layout_id' => $letterhead->id,
         'body' => '<p>{{client}} {{اسم}} {{reference}} {{date}}</p>',
     ]);
 
-    expect($document->placeholder_values)->toBe(['client' => '', 'اسم' => '', 'company' => '']);
+    expect($document->placeholder_values)->toBe(['client' => '', 'اسم' => '', 'company' => '', 'phone' => '']);
 
-    $document->update(['placeholder_values' => ['client' => 'ACME', 'اسم' => 'x', 'company' => 'y']]);
+    $document->update(['placeholder_values' => ['client' => 'ACME', 'اسم' => 'x', 'company' => 'y', 'phone' => 'z']]);
     $document->update(['body' => '<p>{{client}}</p>']);
 
-    expect($document->placeholder_values)->toBe(['client' => 'ACME', 'company' => 'y']);
+    expect($document->placeholder_values)->toBe(['client' => 'ACME', 'company' => 'y', 'phone' => 'z']);
 });
 
 test('rendered content is sanitized, escaped and repeats table headers', function () {
@@ -67,13 +67,61 @@ test('paragraph alignment moves onto its table cell', function () {
     expect($html)->toContain('<td colspan="2" style="text-align: center"><p');
 });
 
+test('header columns follow the logo position and empty right content changes nothing', function (string $position, array $order) {
+    $html = view('pdf.header', [
+        'content' => 'LEFT',
+        'rightContent' => 'RIGHT',
+        'logo' => true,
+        'position' => $position,
+        'direction' => 'ltr',
+    ])->render();
+
+    $positions = collect($order)->map(fn (string $part) => strpos($html, $part));
+
+    expect($positions->all())->toBe($positions->sort()->values()->all())
+        ->and($positions)->not->toContain(false);
+
+    $withoutRight = view('pdf.header', [
+        'content' => 'LEFT',
+        'rightContent' => '',
+        'logo' => true,
+        'position' => $position,
+        'direction' => 'ltr',
+    ])->render();
+
+    expect($withoutRight)->not->toContain('text-align: right;">RIGHT');
+})->with([
+    'logo left' => ['left', ['var:logo', 'LEFT', 'RIGHT']],
+    'logo center' => ['center', ['LEFT', 'var:logo', 'RIGHT']],
+    'logo right' => ['right', ['LEFT', 'RIGHT', 'var:logo']],
+]);
+
+test('right header content is sanitized and fills placeholders', function () {
+    $letterhead = DocumentLayout::create([
+        'name' => 'H',
+        'header_right_content' => '<p>{{ branch }}</p><script>bad()</script><img src="file:///etc/passwd">',
+    ]);
+    $document = Document::create([
+        'title' => 'T',
+        'layout_id' => $letterhead->id,
+        'body' => '<p>x</p>',
+        'placeholder_values' => ['branch' => 'Sharq'],
+    ]);
+
+    expect($document->placeholder_values)->toBe(['branch' => 'Sharq']);
+
+    $html = (fn () => $this->content($document, $letterhead->header_right_content))->call(app(DocumentPdf::class));
+
+    expect($html)->toContain('Sharq')->not->toContain('<script')->not->toContain('<img')
+        ->and(app(DocumentPdf::class)->render($document))->toStartWith('%PDF');
+});
+
 test('an invalid accent colour falls back instead of reaching the css', function () {
-    $header = DocumentLayout::create([
-        'type' => 'header',
+    $letterhead = DocumentLayout::create([
         'name' => 'H',
         'accent_color' => 'red; background: url(http://evil.test/x)',
     ]);
-    $document = Document::create(['title' => 'T', 'header_id' => $header->id, 'body' => '<p>x</p>']);
+    $document = Document::create(['title' => 'T', 'layout_id' => $letterhead->id, 'body' => '<p>x</p>']);
 
     expect(app(DocumentPdf::class)->render($document))->toStartWith('%PDF');
 });
@@ -108,10 +156,10 @@ test('sample seeder is repeatable, complete and renders every document', functio
 
     $this->seed(DocumentSampleSeeder::class);
 
-    expect(DocumentLayout::count())->toBe(6)
+    expect(DocumentLayout::count())->toBe(3)
         ->and(DocumentTemplate::count())->toBe(7)
         ->and(Document::count())->toBe(9)
-        ->and(DocumentLayout::where('type', 'header')->pluck('logo')->unique())->toHaveCount(3)
+        ->and(DocumentLayout::pluck('logo')->unique())->toHaveCount(3)
         ->and(Document::pluck('language')->unique()->sort()->values()->all())->toBe(['ar', 'en'])
         ->and($final->refresh()->reference)->toBe($reference)
         ->and($final->isFinal())->toBeTrue();

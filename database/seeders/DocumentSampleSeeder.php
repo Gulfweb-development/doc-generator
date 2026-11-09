@@ -27,6 +27,7 @@ class DocumentSampleSeeder extends Seeder
             'logo_position' => 'left',
             'signatory' => 'Layla Hassan',
             'header_line' => 'Block 3, Commercial District, Kuwait City',
+            'header_line_ar' => 'قطعة ٣، المنطقة التجارية، مدينة الكويت',
             'footer' => '<p>info@gulfhorizon.test, +965 0000 0000</p>',
         ],
         'noor' => [
@@ -38,6 +39,7 @@ class DocumentSampleSeeder extends Seeder
             'logo_position' => 'center',
             'signatory' => 'Omar Khalil',
             'header_line' => 'Professional education and certification',
+            'header_line_ar' => 'التعليم والشهادات المهنية',
             'footer' => '<p>Licensed training provider, licence no. 0000</p>',
         ],
         'summit' => [
@@ -49,6 +51,7 @@ class DocumentSampleSeeder extends Seeder
             'logo_position' => 'right',
             'signatory' => 'Nadia Farouk',
             'header_line' => 'Tower 7, Floor 12, Sharq',
+            'header_line_ar' => 'برج ٧، الدور ١٢، شرق',
             'footer' => '<p>Confidential. office@summitlegal.test</p>',
         ],
     ];
@@ -66,8 +69,7 @@ class DocumentSampleSeeder extends Seeder
         foreach ($this->templates() as $name => $template) {
             $templates[$name] = DocumentTemplate::updateOrCreate(['name' => $name], [
                 'language' => $template['language'],
-                'header_id' => $layouts[$template['company']]['header'],
-                'footer_id' => $layouts[$template['company']]['footer'],
+                'layout_id' => $layouts[$template['company']],
                 'body' => $template['body'],
                 'logo_mode' => 'default',
                 ...$this->image($template['company'], 'signature', $template['signature']),
@@ -89,7 +91,7 @@ class DocumentSampleSeeder extends Seeder
             ])->save();
         }
 
-        $this->command?->info(count($layouts) * 2 .' layouts, '.count($templates).' templates, '.count($this->documents()).' documents seeded.');
+        $this->command?->info(count($layouts).' letterheads, '.count($templates).' templates, '.count($this->documents()).' documents seeded.');
     }
 
     private function seedLayouts(): array
@@ -97,21 +99,16 @@ class DocumentSampleSeeder extends Seeder
         $layouts = [];
 
         foreach (self::COMPANIES as $key => $company) {
-            $layouts[$key]['header'] = DocumentLayout::updateOrCreate(
-                ['type' => 'header', 'name' => "{$company['name']} header"],
+            $layouts[$key] = DocumentLayout::updateOrCreate(
+                ['name' => $company['name']],
                 [
-                    'content' => $company['logo_position'] === 'center'
-                        ? "<h3 style=\"text-align: center\">{$company['name']}</h3><p style=\"text-align: center\"><strong>{$company['arabic']}</strong></p><p style=\"text-align: center\">{$company['header_line']}</p>"
-                        : "<h3>{$company['name']}</h3><p><strong>{$company['arabic']}</strong></p><p>{$company['header_line']}</p>",
+                    'header_content' => "<h3>{$company['name']}</h3><p>{$company['header_line']}</p>",
+                    'header_right_content' => "<h3>{$company['arabic']}</h3><p>{$company['header_line_ar']}</p>",
                     'logo' => $this->path($key, 'logo'),
                     'logo_position' => $company['logo_position'],
                     'accent_color' => sprintf('#%02x%02x%02x', ...$company['color']),
+                    'footer_content' => $company['footer'],
                 ],
-            )->id;
-
-            $layouts[$key]['footer'] = DocumentLayout::updateOrCreate(
-                ['type' => 'footer', 'name' => "{$company['name']} footer"],
-                ['content' => $company['footer']],
             )->id;
         }
 

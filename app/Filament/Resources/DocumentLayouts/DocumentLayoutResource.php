@@ -17,12 +17,11 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use UnitEnum;
 
@@ -38,12 +37,12 @@ class DocumentLayoutResource extends Resource
 
     public static function getModelLabel(): string
     {
-        return __('Header / footer');
+        return __('Letterhead');
     }
 
     public static function getPluralModelLabel(): string
     {
-        return __('Headers & footers');
+        return __('Letterheads');
     }
 
     public static function getNavigationGroup(): string|UnitEnum|null
@@ -51,45 +50,50 @@ class DocumentLayoutResource extends Resource
         return __('Documents');
     }
 
-    private static function types(): array
-    {
-        return ['header' => __('Header'), 'footer' => __('Footer')];
-    }
-
     public static function form(Schema $schema): Schema
     {
-        $isHeader = fn (Get $get): bool => $get('type') === 'header';
-
         return $schema->components([
-            TextInput::make('name')
-                ->required()
-                ->maxLength(255),
-            Select::make('type')
-                ->options(static::types())
-                ->default('header')
-                ->required()
-                ->live(),
-            DocumentContent::editor('content')
-                ->columnSpanFull(),
-            DocumentContent::imageUpload('logo')
-                ->helperText(__('Leave empty to use the logo from General settings.'))
-                ->visible($isHeader),
-            Select::make('logo_position')
-                ->options([
-                    'left' => __('Left'),
-                    'center' => __('Center'),
-                    'right' => __('Right'),
-                ])
-                ->default('left')
-                ->required()
-                ->visible($isHeader),
-            ColorPicker::make('accent_color')
-                ->hexColor()
-                ->helperText(__('Used for the page edge band, company name and table rules.'))
-                ->visible($isHeader),
-            Toggle::make('is_default')
-                ->label('Default')
-                ->helperText(__('Pre-selected on new documents and templates.')),
+            Section::make(__('Details'))
+                ->columns(2)
+                ->columnSpanFull()
+                ->schema([
+                    TextInput::make('name')
+                        ->required()
+                        ->maxLength(255),
+                    Toggle::make('is_default')
+                        ->label('Default')
+                        ->helperText(__('Pre-selected on new documents and templates.')),
+                ]),
+            Section::make(__('Header'))
+                ->columns(2)
+                ->columnSpanFull()
+                ->schema([
+                    DocumentContent::editor('header_content')
+                        ->label('Left content'),
+                    DocumentContent::editor('header_right_content')
+                        ->label('Right content')
+                        ->helperText(__('Optional. Shown at the right edge of the header, for example the company name in a second language.')),
+                    DocumentContent::imageUpload('logo')
+                        ->helperText(__('Leave empty to use the logo from General settings.')),
+                    Select::make('logo_position')
+                        ->options([
+                            'left' => __('Left'),
+                            'center' => __('Center'),
+                            'right' => __('Right'),
+                        ])
+                        ->default('left')
+                        ->required(),
+                    ColorPicker::make('accent_color')
+                        ->hexColor()
+                        ->helperText(__('Used for the page edge band, company name and table rules.')),
+                ]),
+            Section::make(__('Footer'))
+                ->columnSpanFull()
+                ->schema([
+                    DocumentContent::editor('footer_content')
+                        ->label('Content')
+                        ->helperText(__('Page numbers are added automatically.')),
+                ]),
         ]);
     }
 
@@ -99,16 +103,13 @@ class DocumentLayoutResource extends Resource
             ->columns([
                 TextColumn::make('name')
                     ->searchable(),
-                TextColumn::make('type')
-                    ->badge()
-                    ->formatStateUsing(fn (string $state): string => static::types()[$state] ?? $state),
                 IconColumn::make('is_default')
                     ->label('Default')
                     ->boolean(),
-            ])
-            ->filters([
-                SelectFilter::make('type')
-                    ->options(static::types()),
+                TextColumn::make('updated_at')
+                    ->label('Updated at')
+                    ->dateTime()
+                    ->sortable(),
             ])
             ->recordActions([
                 EditAction::make(),

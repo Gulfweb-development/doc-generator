@@ -19,7 +19,7 @@ class Document extends Model
 
     /** Copied from a template once. Later template edits do not reach existing documents. */
     public const TEMPLATE_FIELDS = [
-        'language', 'header_id', 'footer_id', 'body',
+        'language', 'layout_id', 'body',
         'logo_mode', 'logo', 'signature_mode', 'signature', 'stamp_mode', 'stamp',
     ];
 
@@ -33,14 +33,9 @@ class Document extends Model
         ];
     }
 
-    public function header(): BelongsTo
+    public function layout(): BelongsTo
     {
-        return $this->belongsTo(DocumentLayout::class, 'header_id');
-    }
-
-    public function footer(): BelongsTo
-    {
-        return $this->belongsTo(DocumentLayout::class, 'footer_id');
+        return $this->belongsTo(DocumentLayout::class, 'layout_id');
     }
 
     public function isFinal(): bool
@@ -92,10 +87,9 @@ class Document extends Model
 
     private function syncPlaceholders(): void
     {
-        $text = implode(' ', [
-            $this->body,
-            DocumentLayout::whereKey(array_filter([$this->header_id, $this->footer_id]))->pluck('content')->implode(' '),
-        ]);
+        $layout = DocumentLayout::find($this->layout_id);
+
+        $text = implode(' ', [$this->body, $layout?->header_content, $layout?->header_right_content, $layout?->footer_content]);
 
         preg_match_all(self::PLACEHOLDER_PATTERN, $text, $matches);
 

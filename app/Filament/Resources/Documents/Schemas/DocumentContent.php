@@ -31,14 +31,10 @@ class DocumentContent
                 ->helperText(__('Sets the PDF page direction and the language of page numbers and the signature label. Your content is not translated.'))
                 ->default('en')
                 ->required(),
-            Select::make('header_id')
-                ->label('Header')
-                ->options(fn () => DocumentLayout::options('header'))
-                ->default(fn () => DocumentLayout::defaultId('header')),
-            Select::make('footer_id')
-                ->label('Footer')
-                ->options(fn () => DocumentLayout::options('footer'))
-                ->default(fn () => DocumentLayout::defaultId('footer')),
+            Select::make('layout_id')
+                ->label('Letterhead')
+                ->options(fn () => DocumentLayout::options())
+                ->default(fn () => DocumentLayout::defaultId()),
             static::editor('body')
                 ->required()
                 ->helperText(__('Use {{name}} for values to fill per document. {{reference}} and {{date}} are filled automatically.'))
