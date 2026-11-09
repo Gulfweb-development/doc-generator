@@ -47,6 +47,17 @@ class General extends SettingsPage
                 FileUpload::make('favicon')
                     ->image()
                     ->directory('settings'),
+                // Private disk: a leaked signature or stamp image enables forgery.
+                FileUpload::make('signature')
+                    ->acceptedFileTypes(['image/png', 'image/jpeg'])
+                    ->disk('local')
+                    ->visibility('private')
+                    ->directory('settings'),
+                FileUpload::make('stamp')
+                    ->acceptedFileTypes(['image/png', 'image/jpeg'])
+                    ->disk('local')
+                    ->visibility('private')
+                    ->directory('settings'),
             ]);
     }
 }

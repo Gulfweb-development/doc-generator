@@ -274,7 +274,8 @@ return [
     */
 
     'payload' => [
-        'max_size' => 1024 * 1024,   // 1MB - maximum request payload size in bytes
+        // Large document bodies: the editor's JSON state is about 10x the HTML, around 850 bytes per table row.
+        'max_size' => 32 * 1024 * 1024,   // 32MB - maximum request payload size in bytes
         'max_nesting_depth' => 10,   // Maximum depth of dot-notation property paths
         'max_calls' => 50,           // Maximum method calls per request
         'max_components' => 200,     // Maximum components per batch request

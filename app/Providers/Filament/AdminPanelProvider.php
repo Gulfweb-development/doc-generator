@@ -3,11 +3,13 @@
 namespace App\Providers\Filament;
 
 use AchyutN\FilamentLogViewer\FilamentLogViewer;
+use App\Http\Controllers\DocumentPdfController;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
@@ -20,6 +22,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Jacobtims\FilamentLogger\FilamentLoggerPlugin;
 use LaraZeus\SpatieTranslatable\SpatieTranslatablePlugin;
@@ -68,11 +71,21 @@ class AdminPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->plugins([
-                FilamentShieldPlugin::make()->globallySearchable(false),
+                FilamentShieldPlugin::make()->globallySearchable(false)->registerNavigation(false),
                 FilamentLoggerPlugin::make(),
                 FilamentLogViewer::make(),
                 SpatieTranslatablePlugin::make()->persist(),
             ])
+            // Closures so the labels still match after the locale switches to Arabic.
+            ->navigationGroups([
+                NavigationGroup::make(fn (): string => __('Documents')),
+                NavigationGroup::make(fn (): string => __('Settings')),
+                // shortcut: the log viewer freezes its group label in the boot locale, so it stays "System" in Arabic. Translate it if the package fixes this.
+                NavigationGroup::make('System'),
+            ])
+            ->authenticatedRoutes(function (): void {
+                Route::get('documents/{document}/pdf', DocumentPdfController::class)->name('documents.pdf');
+            })
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_BEFORE, fn (): string => view('components/developer-login')->render())
             ->authMiddleware([
                 Authenticate::class,

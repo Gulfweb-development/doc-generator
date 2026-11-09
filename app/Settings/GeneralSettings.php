@@ -12,6 +12,10 @@ class GeneralSettings extends Settings
 
     public ?string $favicon;
 
+    public ?string $signature;
+
+    public ?string $stamp;
+
     public static function group(): string
     {
         return 'general';

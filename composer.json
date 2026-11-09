@@ -27,6 +27,7 @@
         "laravel/tinker": "^3.0",
         "livewire/flux": "^2.21",
         "livewire/livewire": "^4.4",
+        "mpdf/mpdf": "^8.3",
         "myfatoorah/library": "^2.2.10",
         "nnjeim/world": "^2.0",
         "spatie/laravel-glide": "^3.8.2",
