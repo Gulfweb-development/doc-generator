@@ -93,7 +93,7 @@ class PdfDocumentResource extends Resource
                 ->orderBy('name')
                 ->pluck('name', 'id'))
             ->placeholder(__('No template'))
-            ->helperText(__('Choosing a template replaces the language, body and images below.'))
+            ->helperText(__('Choosing a template replaces the language and images below.'))
             ->live()
             ->columnSpanFull()
             ->afterStateUpdated(function (?string $state, Set $set): void {
@@ -113,7 +113,7 @@ class PdfDocumentResource extends Resource
     }
 
     /** Shared with templates, which name the first field differently and have no template picker. */
-    public static function components(TextInput $titleField, array $before = [], array $after = []): array
+    public static function components(TextInput $titleField, array $before = [], array $after = [], bool $withBody = true): array
     {
         return [
             Section::make(__('Content'))
@@ -131,6 +131,7 @@ class PdfDocumentResource extends Resource
                     ...$after,
                     DocumentContent::editor('body')
                         ->required()
+                        ->visible($withBody)
                         ->columnSpanFull(),
                 ]),
             Section::make(__('Images'))

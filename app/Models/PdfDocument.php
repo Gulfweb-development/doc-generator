@@ -16,7 +16,7 @@ class PdfDocument extends Model
 
     /** Copied from a template once. Later template edits do not reach existing documents. */
     // image_layout first, so the form shows the matching image fields before they are filled.
-    public const TEMPLATE_FIELDS = ['image_layout', 'language', 'body', ...self::IMAGES, 'signature_mode', 'stamp_mode'];
+    public const TEMPLATE_FIELDS = ['image_layout', 'language', ...self::IMAGES, 'signature_mode', 'stamp_mode'];
 
     public function usesLetterhead(): bool
     {

@@ -210,15 +210,15 @@ test('a new document is created from a template once', function () {
 
     expect($document->only('language', 'body', 'header_image', 'stamp', 'footer_image'))->toBe([
         'language' => 'ar',
-        'body' => '<p>Template body</p>',
+        'body' => null,
         'header_image' => 'documents/images/header.png',
         'stamp' => 'documents/images/stamp.png',
         'footer_image' => null,
     ]);
 
-    $template->update(['body' => '<p>changed</p>']);
+    $template->update(['language' => 'en']);
 
-    expect($document->refresh()->body)->toBe('<p>Template body</p>');
+    expect($document->refresh()->language)->toBe('ar');
 });
 
 test('picking a template on the document form fills its fields', function () {
@@ -238,7 +238,7 @@ test('picking a template on the document form fills its fields', function () {
     Livewire::test(CreatePdfDocument::class)
         ->fillForm(['template_id' => $template->id])
         ->assertSchemaStateSet(['image_layout' => 'separate', 'language' => 'ar', 'signature_mode' => 'none'])
-        ->fillForm(['title' => 'From picker'])
+        ->fillForm(['title' => 'From picker', 'body' => '<p>Typed</p>'])
         ->call('create')
         ->assertHasNoFormErrors();
 
@@ -246,7 +246,7 @@ test('picking a template on the document form fills its fields', function () {
 
     expect($document->only('template_id', 'language', 'header_image', 'signature_mode'))
         ->toBe(['template_id' => $template->id, 'language' => 'ar', 'header_image' => $header, 'signature_mode' => 'none'])
-        ->and($document->body)->toContain('Template body');
+        ->and($document->body)->toContain('Typed');
 
     // Opening the edit page shows the saved choice and keeps the document's own content.
     $document->update(['body' => '<p>Edited</p>']);
@@ -278,17 +278,18 @@ test('preview saves the form first and refuses invalid input', function () {
     expect($document->refresh()->title)->toBe('After');
 });
 
-test('templates use the same fields as new documents', function () {
+test('templates use the same fields as new documents, without a body', function () {
     $this->actingAs(superAdmin(), 'admin');
 
     Livewire::test(CreateDocumentTemplate::class)
-        ->fillForm(['name' => 'Plain', 'language' => 'en', 'body' => '<p>x</p>'])
+        ->assertSchemaComponentHidden('body')
+        ->fillForm(['name' => 'Plain', 'language' => 'en'])
         ->call('create')
         ->assertHasNoFormErrors()
         ->assertNotified('Template created')
         ->assertRedirect(DocumentTemplateResource::getUrl('index'));
 
-    expect(DocumentTemplate::firstWhere('name', 'Plain')->body)->toContain('x');
+    expect(DocumentTemplate::firstWhere('name', 'Plain')->body)->toBeNull();
 });
 
 test('signature and stamp follow their default, upload or none choice', function () {

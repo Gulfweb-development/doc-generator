@@ -56,6 +56,7 @@ class DocumentTemplateResource extends Resource
             TextInput::make('name')
                 ->required()
                 ->maxLength(255),
+            withBody: false,
         ));
     }
 
