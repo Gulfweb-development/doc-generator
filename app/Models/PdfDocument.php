@@ -15,13 +15,19 @@ class PdfDocument extends Model
     public const IMAGES = ['header_image', 'footer_image', 'background_image', 'signature', 'stamp'];
 
     /** Copied from a template once. Later template edits do not reach existing documents. */
-    public const TEMPLATE_FIELDS = ['language', 'body', ...self::IMAGES, 'signature_mode', 'stamp_mode'];
+    // image_layout first, so the form shows the matching image fields before they are filled.
+    public const TEMPLATE_FIELDS = ['image_layout', 'language', 'body', ...self::IMAGES, 'signature_mode', 'stamp_mode'];
+
+    public function usesLetterhead(): bool
+    {
+        return $this->image_layout !== 'separate';
+    }
 
     protected $guarded = ['id'];
 
     protected function casts(): array
     {
-        return ['finalized_at' => 'datetime'];
+        return ['finalized_at' => 'datetime', 'document_date' => 'date'];
     }
 
     public function isFinal(): bool

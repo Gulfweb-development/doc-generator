@@ -261,3 +261,67 @@ test('finalizing stores the pdf and numbers documents per year', function () {
 
     Storage::disk('local')->assertExists($path);
 });
+
+test('a letterhead document places date, reference and sign-off automatically', function () {
+    $document = new PdfDocument([
+        'title' => 'T',
+        'language' => 'ar',
+        'body' => '<p>x</p>',
+        'reference' => 'DOC-2026-0520',
+        'document_date' => '2026-11-09',
+        'signature_mode' => 'none', 'stamp_mode' => 'none',
+    ]);
+    $pdf = app(DocumentPdf::class);
+    $spots = (fn () => $this->letterheadSpots($document))->call($pdf);
+
+    // Date beside the date label, reference beside the reference label, in the letterhead's own style.
+    expect($spots)->toHaveCount(2)
+        ->and($spots[0][0])->toBe(143.0)
+        ->and($spots[0][2])->toContain('٠٩ نوفمبر ٢٠٢٦')
+        ->and($spots[1][0])->toBe(24.0)
+        ->and($spots[1][2])->toContain('٢٠٢٦ / ٠٠٥٢٠')
+        ->and($pdf->renderPdfDocument($document))->toStartWith('%PDF');
+
+    // A typed reference wins over the finalize number.
+    $document->reference_number = '2026 / 00777';
+
+    expect((fn () => $this->letterheadSpots($document))->call($pdf)[1][2])->toContain('٢٠٢٦ / ٠٠٧٧٧');
+
+    // A draft with no typed reference has no reference yet, so only the date prints.
+    $document->fill(['reference' => null, 'reference_number' => null]);
+
+    expect((fn () => $this->letterheadSpots($document))->call($pdf))->toHaveCount(1);
+
+    // The spots go into the page header, so a long letter repeats them on every page.
+    expect((fn () => $this->letterheadRow([[24.0, 75.0, 'REF'], [143.0, 75.0, 'DATE']]))->call($pdf))
+        ->toContain('padding-top: 63.0mm')
+        ->toContain('width: 6.0mm')
+        ->toContain('width: 59.0mm;"></td><td style="width: 49.0mm; white-space: nowrap;">DATE');
+
+    $document->fill(['reference_number' => '1', 'body' => str_repeat('<p>'.str_repeat('نص ', 80).'</p>', 30)]);
+    $output = $pdf->renderPdfDocument($document);
+
+    expect(preg_match('#/Count (\d+)#', $output, $count) && (int) $count[1] > 1)->toBeTrue();
+
+    // Signature then stamp in one column, without the "Authorized signature" line.
+    $signoff = view('pdf.body', [
+        'body' => '', 'signature' => true, 'stamp' => true, 'signatureLabel' => 'Authorized signature', 'stackedSignoff' => true,
+    ])->render();
+
+    expect($signoff)->toContain('var:signature')->toContain('var:stamp')->not->toContain('Authorized signature');
+});
+
+test('the page design picks a full letterhead or separate images', function () {
+    expect((new PdfDocument)->usesLetterhead())->toBeTrue()
+        ->and((new PdfDocument(['image_layout' => 'letterhead']))->usesLetterhead())->toBeTrue()
+        ->and((new PdfDocument(['image_layout' => 'separate']))->usesLetterhead())->toBeFalse()
+        ->and(PdfDocument::TEMPLATE_FIELDS[0])->toBe('image_layout');
+});
+
+test('only active templates are offered for new documents', function () {
+    $active = DocumentTemplate::create(['name' => 'Active one']);
+    DocumentTemplate::create(['name' => 'Inactive one', 'is_active' => false]);
+
+    expect(DocumentTemplate::active()->pluck('id')->all())->toBe([$active->id])
+        ->and($active->fresh()->is_active)->toBeTrue();
+});

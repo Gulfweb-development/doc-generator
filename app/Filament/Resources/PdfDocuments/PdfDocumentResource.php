@@ -14,10 +14,13 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -66,6 +69,16 @@ class PdfDocumentResource extends Resource
                 ->required()
                 ->maxLength(255),
             [static::templateSelect()],
+            [
+                DatePicker::make('document_date')
+                    ->label('Date')
+                    ->helperText(__('Printed beside the date label of a full letterhead. Empty uses the finalize date, or today for drafts.')),
+                TextInput::make('reference_number')
+                    ->label('Our reference')
+                    ->maxLength(50)
+                    ->placeholder('2026 / 00520')
+                    ->helperText(__('Printed beside the reference label of a full letterhead. Empty uses the finalize number once finalized.')),
+            ],
         ));
     }
 
@@ -74,9 +87,13 @@ class PdfDocumentResource extends Resource
     {
         return Select::make('template_id')
             ->label('Template')
-            ->options(fn () => DocumentTemplate::orderBy('name')->pluck('name', 'id'))
+            // Active templates only, plus the one already saved on this document so its label still shows.
+            ->options(fn (?PdfDocument $record) => DocumentTemplate::active()
+                ->when($record?->template_id, fn ($query, $id) => $query->orWhere('id', $id))
+                ->orderBy('name')
+                ->pluck('name', 'id'))
             ->placeholder(__('No template'))
-            ->helperText(__('Choosing a template replaces the language, body, images, signature and stamp below.'))
+            ->helperText(__('Choosing a template replaces the language, body and images below.'))
             ->live()
             ->columnSpanFull()
             ->afterStateUpdated(function (?string $state, Set $set): void {
@@ -96,7 +113,7 @@ class PdfDocumentResource extends Resource
     }
 
     /** Shared with templates, which name the first field differently and have no template picker. */
-    public static function components(TextInput $titleField, array $before = []): array
+    public static function components(TextInput $titleField, array $before = [], array $after = []): array
     {
         return [
             Section::make(__('Content'))
@@ -111,6 +128,7 @@ class PdfDocumentResource extends Resource
                         ->helperText(__('Sets the PDF page direction and the language of the signature label. Your content is not translated.'))
                         ->default('en')
                         ->required(),
+                    ...$after,
                     DocumentContent::editor('body')
                         ->required()
                         ->columnSpanFull(),
@@ -120,12 +138,32 @@ class PdfDocumentResource extends Resource
                 ->columns(3)
                 ->columnSpanFull()
                 ->schema([
+                    Radio::make('image_layout')
+                        ->label('Page design')
+                        ->options([
+                            'letterhead' => __('Full letterhead'),
+                            'separate' => __('Separate header, footer and background'),
+                        ])
+                        ->descriptions([
+                            'letterhead' => __('One A4 image of the whole letterhead. The text, date and reference are placed into it automatically.'),
+                            'separate' => __('A header banner, a footer banner and an optional background, each uploaded on its own.'),
+                        ])
+                        ->default('letterhead')
+                        ->required()
+                        ->live()
+                        ->columnSpanFull(),
                     DocumentContent::imageUpload('header_image')
+                        ->visible(fn (Get $get): bool => $get('image_layout') === 'separate')
                         ->helperText(__('Full width at the top of every page.')),
                     DocumentContent::imageUpload('footer_image')
+                        ->visible(fn (Get $get): bool => $get('image_layout') === 'separate')
                         ->helperText(__('Full width at the bottom of every page.')),
+                    // One column for both designs: the letterhead is a full-page background.
                     DocumentContent::imageUpload('background_image')
-                        ->helperText(__('Fills every page behind the content. Use an A4 shaped image.')),
+                        ->label(fn (Get $get): string => $get('image_layout') === 'separate' ? __('Background image') : __('Letterhead'))
+                        ->helperText(fn (Get $get): string => $get('image_layout') === 'separate'
+                            ? __('Fills every page behind the content. Use an A4 shaped image.')
+                            : __('The whole A4 letterhead page, with its logo, date and reference labels and footer.')),
                     // Default uses the signature and stamp from General settings.
                     DocumentContent::image('signature'),
                     DocumentContent::image('stamp'),

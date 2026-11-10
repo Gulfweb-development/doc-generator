@@ -9,6 +9,7 @@ use App\Filament\Resources\DocumentTemplates\Pages\ListDocumentTemplates;
 use App\Filament\Resources\PdfDocuments\PdfDocumentResource;
 use App\Models\DocumentTemplate;
 use BackedEnum;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
@@ -18,7 +19,10 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use UnitEnum;
 
 class DocumentTemplateResource extends Resource
@@ -68,13 +72,33 @@ class DocumentTemplateResource extends Resource
                     ->label('Updated at')
                     ->dateTime()
                     ->sortable(),
+                ToggleColumn::make('is_active')
+                    ->label(__('Active')),
             ])
+            // Newest template first, then active A–Z, then inactive A–Z.
+            ->defaultSort(fn (Builder $query): Builder => $query
+                ->orderByRaw('id = (select max(id) from document_templates) desc')
+                ->orderByDesc('is_active')
+                ->orderBy('name'))
             ->recordActions([
                 EditAction::make(),
                 DeleteAction::make(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
+                    BulkAction::make('activate')
+                        ->label(__('Activate'))
+                        ->icon(Heroicon::OutlinedCheckCircle)
+                        ->authorizeIndividualRecords('update')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(fn (Collection $records) => DocumentTemplate::whereKey($records->modelKeys())->update(['is_active' => true])),
+                    BulkAction::make('deactivate')
+                        ->label(__('Deactivate'))
+                        ->icon(Heroicon::OutlinedXCircle)
+                        ->color('gray')
+                        ->authorizeIndividualRecords('update')
+                        ->deselectRecordsAfterCompletion()
+                        ->action(fn (Collection $records) => DocumentTemplate::whereKey($records->modelKeys())->update(['is_active' => false])),
                     DeleteBulkAction::make()->authorizeIndividualRecords('delete'),
                 ]),
             ]);

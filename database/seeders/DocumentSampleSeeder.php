@@ -104,6 +104,7 @@ class DocumentSampleSeeder extends Seeder
         $templates['Letter - Meridian (images)'] = DocumentTemplate::updateOrCreate(['name' => 'Letter - Meridian (images)'], [
             'language' => 'en',
             'body' => '<p>Date: </p><p><strong>To:</strong> </p><h3>Subject: </h3><p>Dear ,</p><p></p><p>Yours sincerely,</p>',
+            'image_layout' => 'separate',
             ...array_combine(PdfDocument::IMAGES, array_map(fn (string $name) => $this->path('meridian', $name), PdfDocument::IMAGES)),
             'signature_mode' => 'upload',
             'stamp_mode' => 'upload',
@@ -135,6 +136,7 @@ class DocumentSampleSeeder extends Seeder
                     .'<p>We confirm that our team will inspect the new warehouse site on 20 November 2026 and share the structural report within five working days.</p>'
                     .'<p>This sample uses every image: header, footer, page background, signature and stamp.</p>'
                     .'<p>Yours sincerely,</p>',
+                'image_layout' => 'separate',
                 ...$meridian(PdfDocument::IMAGES),
                 'signature_mode' => 'upload',
                 'stamp_mode' => 'upload',
@@ -146,6 +148,7 @@ class DocumentSampleSeeder extends Seeder
                     .'<p>نفيدكم بأن السيدة <strong>سارة محمود</strong> تعمل لدينا بوظيفة مهندسة مدنية منذ ١ مارس ٢٠٢٢، وما زالت على رأس عملها حتى تاريخه.</p>'
                     .'<p>وقد أعطي لها هذا الخطاب بناءً على طلبها دون أدنى مسؤولية على الشركة.</p>'
                     .'<p>هذا المثال يستخدم صورة الرأس والتذييل فقط، والتوقيع والختم من الإعدادات العامة.</p>',
+                'image_layout' => 'separate',
                 ...$meridian(['header_image', 'footer_image']),
                 'background_image' => null,
                 'signature' => null,
@@ -159,6 +162,7 @@ class DocumentSampleSeeder extends Seeder
                     .$this->partiesTable('Prepared for', 'Blue Harbor Logistics', 'Quotation details', 'Date: 10 November 2026<br>Valid until: 10 December 2026')
                     .$this->pricedTable(self::STANDARD_ITEMS)
                     .'<p>This sample has no images of its own, so only the General settings signature and stamp appear.</p>',
+                'image_layout' => 'letterhead',
                 'header_image' => null,
                 'footer_image' => null,
                 'background_image' => null,

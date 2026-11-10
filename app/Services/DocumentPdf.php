@@ -13,6 +13,17 @@ use Symfony\Component\HtmlSanitizer\HtmlSanitizerConfig;
 
 class DocumentPdf
 {
+    /**
+     * Where content goes on a full-page letterhead background, in millimetres on A4.
+     * Measured on the Kuwait Bar Association letterhead: logo and date row on top, address footer below.
+     * shortcut: one layout for every background letterhead; make it per template if letterheads differ.
+     */
+    private const LETTERHEAD = [
+        'margins' => ['top' => 88, 'bottom' => 26, 'left' => 18, 'right' => 18],
+        'date' => [143, 75],
+        'reference' => [24, 75],
+    ];
+
     public function render(Document $document): string
     {
         $layout = $document->layout;
@@ -53,6 +64,13 @@ class DocumentPdf
             $images[$name] = $this->pdfDocumentImage($document, $name);
         }
 
+        // A full letterhead is one page image with its own header and footer drawn on it, so stray banners are ignored.
+        $letterhead = $document->usesLetterhead() && $images['background_image'] !== null;
+
+        if ($document->usesLetterhead()) {
+            $images['header_image'] = $images['footer_image'] = null;
+        }
+
         return $this->build(
             language: $document->language,
             final: $document->isFinal(),
@@ -64,7 +82,45 @@ class DocumentPdf
             footer: '',
             logoPosition: 'left',
             pageNumbers: false,
+            margins: $letterhead ? self::LETTERHEAD['margins'] : [],
+            letterheadSpots: $letterhead ? $this->letterheadSpots($document) : [],
+            letterhead: $letterhead,
+            stackedSignoff: true,
         );
+    }
+
+    /**
+     * Date and reference beside the labels the letterhead prints, repeated on every page.
+     *
+     * @return list<array{float, float, string}> x and y in millimetres from the page edges, and HTML
+     */
+    private function letterheadSpots(PdfDocument $document): array
+    {
+        $arabic = $document->language === 'ar';
+        $digits = fn (string $text): string => $arabic ? strtr($text, ['0' => '٠', '1' => '١', '2' => '٢', '3' => '٣', '4' => '٤', '5' => '٥', '6' => '٦', '7' => '٧', '8' => '٨', '9' => '٩']) : $text;
+        $date = ($document->document_date ?? $document->finalized_at ?? now())->locale($arabic ? 'ar' : 'en')->translatedFormat('d F Y');
+
+        // The typed reference wins; otherwise DOC-2026-0012 prints as 2026 / 00012, the numbering style letterheads use.
+        $reference = match (true) {
+            filled($document->reference_number) => trim($document->reference_number),
+            (bool) preg_match('/^DOC-(\d{4})-(\d+)$/', (string) $document->reference, $match) => sprintf('%s / %05d', $match[1], $match[2]),
+            default => (string) $document->reference,
+        };
+
+        $spots = [];
+
+        foreach ([[self::LETTERHEAD['date'], $date], [self::LETTERHEAD['reference'], $reference]] as [[$x, $y], $text]) {
+            if ($text !== '') {
+                // Headers skip mPDF's automatic font switch, so Arabic text names its font.
+                $spots[] = [(float) $x, (float) $y, sprintf(
+                    '<div dir="ltr" style="text-align: left; font-family: %s; font-weight: bold; font-size: 11pt; color: #1f3a5f;">%s</div>',
+                    $arabic ? 'xbriyaz' : 'freesans',
+                    e($digits($text)),
+                )];
+            }
+        }
+
+        return $spots;
     }
 
     /**
@@ -83,6 +139,12 @@ class DocumentPdf
         string $footer,
         string $logoPosition,
         bool $pageNumbers,
+        // Millimetres by side; null keeps the automatic value.
+        array $margins = [],
+        array $letterheadSpots = [],
+        bool $letterhead = false,
+        // One centred column with no "Authorized signature" line, for documents that may carry the name in the signature image.
+        bool $stackedSignoff = false,
     ): string {
         // Measured: about 4 ms and 50 KB per table row, so 20,000 rows need 77 s and 1 GB.
         // shortcut: renders in the web request. Move to a queued job if documents outgrow the web server timeout.
@@ -100,10 +162,10 @@ class DocumentPdf
             'watermark_font' => 'freesans',
             'autoScriptToLang' => true,
             'autoLangToFont' => true,
-            'margin_left' => 24,
-            'margin_right' => 24,
-            'margin_top' => $headerMm > 0 ? $headerMm + 8 : 16,
-            'margin_bottom' => $footerMm > 0 ? $footerMm + 8 : 16,
+            'margin_left' => $margins['left'] ?? 24,
+            'margin_right' => $margins['right'] ?? 24,
+            'margin_top' => $margins['top'] ?? ($headerMm > 0 ? $headerMm + 8 : 16),
+            'margin_bottom' => $margins['bottom'] ?? ($footerMm > 0 ? $footerMm + 8 : 16),
             'margin_header' => $headerMm > 0 ? $headerMm + 4 : 12,
             'margin_footer' => $footerMm > 0 ? $footerMm + 3 : 10,
             // Grow page margins to fit whatever height the header and footer turn out to be.
@@ -123,7 +185,10 @@ class DocumentPdf
         // mPDF keeps headers inside the side margins and ignores fixed positioning there, so
         // page-wide images go through the watermark image layer, which holds one image: the
         // background and banners merged into one page, or else the edge band (left in English, right in Arabic).
-        if ($images['background_image'] ?? $images['header_image'] ?? $images['footer_image'] ?? null) {
+        if (isset($mpdf->imageVars['background_image']) && ! isset($mpdf->imageVars['header_image']) && ! isset($mpdf->imageVars['footer_image'])) {
+            // Nothing to merge, so the background keeps its full resolution.
+            $mpdf->SetWatermarkImage('var:background_image', 1, [210, 297], [0, 0]);
+        } elseif ($images['background_image'] ?? $images['header_image'] ?? $images['footer_image'] ?? null) {
             $mpdf->imageVars['page'] = $this->pageLayer($images, $accent, $direction);
             $mpdf->SetWatermarkImage('var:page', 1, [210, 297], [0, 0]);
         } elseif ($accent !== null) {
@@ -146,13 +211,14 @@ class DocumentPdf
             'signature' => $has('signature'),
             'stamp' => $has('stamp'),
             'signatureLabel' => trans('Authorized signature', [], $language),
+            'stackedSignoff' => $stackedSignoff,
         ])->render();
 
         // mPDF refuses HTML longer than this limit, and the default is 1 MB.
         ini_set('pcre.backtrack_limit', (string) max(1_000_000, strlen($body) * 2));
 
-        $mpdf->WriteHTML(view('pdf.styles', compact('accent', 'direction'))->render(), HTMLParserMode::HEADER_CSS);
-        $mpdf->SetHTMLHeader(view('pdf.header', [
+        $mpdf->WriteHTML(view('pdf.styles', compact('accent', 'direction', 'letterhead'))->render(), HTMLParserMode::HEADER_CSS);
+        $mpdf->SetHTMLHeader($letterheadSpots !== [] ? $this->letterheadRow($letterheadSpots) : view('pdf.header', [
             'content' => $header,
             'rightContent' => $headerRight,
             'logo' => $has('logo'),
@@ -167,6 +233,38 @@ class DocumentPdf
         $mpdf->WriteHTML($body, HTMLParserMode::HTML_BODY);
 
         return $mpdf->Output('', 'S');
+    }
+
+    /**
+     * Places the spots on one row through the page header, so every page gets them.
+     * mPDF ignores fixed positioning in headers, so the row is pushed down and across with spacers.
+     *
+     * @param  list<array{float, float, string}>  $spots  all on the same row
+     */
+    private function letterheadRow(array $spots): string
+    {
+        // The header area starts 12 mm from the top (margin_header without banners) and spans the side margins.
+        $left = self::LETTERHEAD['margins']['left'];
+        $right = 210 - self::LETTERHEAD['margins']['right'];
+        usort($spots, fn (array $a, array $b): int => $a[0] <=> $b[0]);
+
+        $cells = '';
+        $cursor = $left;
+
+        foreach ($spots as [$x, , $html]) {
+            $width = min(60, $right - $x);
+            $cells .= sprintf('<td style="width: %.1fmm;"></td><td style="width: %.1fmm; white-space: nowrap;">%s</td>', $x - $cursor, $width, $html);
+            $cursor = $x + $width;
+        }
+
+        // Widths add up to the full content width, so mPDF keeps every column where it was placed.
+        $cells .= sprintf('<td style="width: %.1fmm;"></td>', max(0, $right - $cursor));
+
+        return sprintf(
+            '<div style="padding-top: %.1fmm;"><table class="plain" dir="ltr" style="width: 100%%; table-layout: fixed;"><tr>%s</tr></table></div>',
+            min(array_column($spots, 1)) - 12,
+            $cells,
+        );
     }
 
     private function bannerHeightMm(?string $image): float

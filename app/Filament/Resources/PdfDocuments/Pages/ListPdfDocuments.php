@@ -25,14 +25,14 @@ class ListPdfDocuments extends ListRecords
                 ->schema([
                     Select::make('template_id')
                         ->label('Template')
-                        ->options(fn () => DocumentTemplate::orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => DocumentTemplate::active()->orderBy('name')->pluck('name', 'id'))
                         ->required(),
                     TextInput::make('title')
                         ->required()
                         ->maxLength(255),
                 ])
                 ->action(function (array $data) {
-                    $template = DocumentTemplate::findOrFail($data['template_id']);
+                    $template = DocumentTemplate::active()->findOrFail($data['template_id']);
 
                     $document = PdfDocument::create([
                         'title' => $data['title'],

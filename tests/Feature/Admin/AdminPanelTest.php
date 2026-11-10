@@ -140,6 +140,7 @@ test('a new document saves its images, previews, finalizes and locks', function 
             'title' => 'Offer letter',
             'language' => 'ar',
             'body' => '<p>مرحبا {{name}}</p>',
+            'image_layout' => 'separate',
             'header_image' => UploadedFile::fake()->image('header.png', 400, 60),
             'signature_mode' => 'none',
             'stamp_mode' => 'upload',
@@ -228,6 +229,7 @@ test('picking a template on the document form fills its fields', function () {
         'name' => 'Letter',
         'language' => 'ar',
         'body' => '<p>Template body</p>',
+        'image_layout' => 'separate',
         'header_image' => $header,
         'signature_mode' => 'none',
         'stamp_mode' => 'default',
@@ -235,7 +237,7 @@ test('picking a template on the document form fills its fields', function () {
 
     Livewire::test(CreatePdfDocument::class)
         ->fillForm(['template_id' => $template->id])
-        ->assertSchemaStateSet(['language' => 'ar', 'signature_mode' => 'none'])
+        ->assertSchemaStateSet(['image_layout' => 'separate', 'language' => 'ar', 'signature_mode' => 'none'])
         ->fillForm(['title' => 'From picker'])
         ->call('create')
         ->assertHasNoFormErrors();

@@ -21,3 +21,13 @@ table.footline p { margin: 0; }
 table.signoff { margin-top: 22pt; page-break-inside: avoid; }
 table.signoff td.signature-line { border-top: 0.4pt solid #5b6470; padding-top: 3pt; font-size: 8pt; color: #5b6470; text-align: {{ $direction === 'rtl' ? 'right' : 'left' }}; }
 th h1, th h2, th h3, td h1, td h2, td h3 { margin: 0; }
+@if ($direction === 'rtl')
+{{-- Arabic letters read best justified; a paragraph's own alignment from the editor still wins. --}}
+p { text-align: justify; }
+@endif
+@if ($letterhead ?? false)
+{{-- Letters on a printed letterhead read in a larger bold face, like the association's own letters. --}}
+body { font-weight: bold; font-size: {{ $direction === 'rtl' ? '13pt' : '11.5pt' }}; line-height: 1.6; }
+p { margin: 0 0 8pt 0; }
+h1, h2, h3 { text-align: center; }
+@endif
