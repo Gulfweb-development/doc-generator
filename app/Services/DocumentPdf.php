@@ -282,8 +282,12 @@ class DocumentPdf
 
     private function pdfDocumentImage(PdfDocument $document, string $name): ?string
     {
-        // Signature and stamp fall back to General settings; the banners and background do not.
-        $path = $document->{$name} ?? (in_array($name, ['signature', 'stamp'], true) ? setting("general.{$name}") : null);
+        // Signature and stamp pick their source by mode; the banners and background are uploads only.
+        $path = match (in_array($name, ['signature', 'stamp'], true) ? $document->{"{$name}_mode"} : 'upload') {
+            'none' => null,
+            'upload' => $document->{$name},
+            default => setting("general.{$name}"),
+        };
 
         return $this->bytes('local', $path);
     }

@@ -10,6 +10,7 @@ use App\Filament\Resources\Documents\DocumentResource;
 use App\Filament\Resources\Documents\Pages\EditDocument;
 use App\Filament\Resources\Documents\Pages\ListDocuments;
 use App\Filament\Resources\DocumentTemplates\DocumentTemplateResource;
+use App\Filament\Resources\DocumentTemplates\Pages\CreateDocumentTemplate;
 use App\Filament\Resources\DocumentTemplates\Pages\ListDocumentTemplates;
 use App\Filament\Resources\PdfDocuments\Pages\CreatePdfDocument;
 use App\Filament\Resources\PdfDocuments\Pages\EditPdfDocument;
@@ -120,6 +121,7 @@ test('super admins can open every panel page', function (string $uri) {
 
 test('the sidebar shows the new documents and hides the old documents and letterheads', function () {
     expect(PdfDocumentResource::shouldRegisterNavigation())->toBeTrue()
+        ->and(DocumentTemplateResource::shouldRegisterNavigation())->toBeTrue()
         ->and(DocumentResource::shouldRegisterNavigation())->toBeFalse()
         ->and(DocumentLayoutResource::shouldRegisterNavigation())->toBeFalse();
 
@@ -139,6 +141,8 @@ test('a new document saves its images, previews, finalizes and locks', function 
             'language' => 'ar',
             'body' => '<p>مرحبا {{name}}</p>',
             'header_image' => UploadedFile::fake()->image('header.png', 400, 60),
+            'signature_mode' => 'none',
+            'stamp_mode' => 'upload',
             'stamp' => UploadedFile::fake()->image('stamp.png', 80, 80),
         ])
         ->call('create')
@@ -155,9 +159,17 @@ test('a new document saves its images, previews, finalizes and locks', function 
         ->assertHeader('Content-Type', 'application/pdf');
 
     Livewire::test(EditPdfDocument::class, ['record' => $document->getRouteKey()])
-        ->callAction('finalize');
+        ->assertActionVisible('saveTop')
+        ->assertActionVisible('pdfTop')
+        ->assertActionVisible('deleteTop')
+        ->fillForm(['title' => 'Offer letter v2'])
+        ->callAction('saveTop')
+        ->assertNotified()
+        ->callAction('finalizeTop');
 
     $document->refresh();
+
+    expect($document->title)->toBe('Offer letter v2');
 
     expect($document->reference)->toBe('DOC-'.now()->year.'-0001')
         ->and(PdfDocumentResource::canEdit($document))->toBeFalse()
@@ -179,7 +191,105 @@ test('a new document saves its images, previews, finalizes and locks', function 
     Storage::disk('local')->assertMissing($document->pdf_path);
 });
 
-test('a new document falls back to the general signature and stamp only', function () {
+test('a new document is created from a template once', function () {
+    $this->actingAs(superAdmin(), 'admin');
+    $template = DocumentTemplate::create([
+        'name' => 'Letter',
+        'language' => 'ar',
+        'body' => '<p>Template body</p>',
+        'header_image' => 'documents/images/header.png',
+        'stamp' => 'documents/images/stamp.png',
+    ]);
+
+    Livewire::test(ListPdfDocuments::class)
+        ->callAction('fromTemplate', data: ['template_id' => $template->id, 'title' => 'For ACME'])
+        ->assertHasNoActionErrors();
+
+    $document = PdfDocument::firstWhere('title', 'For ACME');
+
+    expect($document->only('language', 'body', 'header_image', 'stamp', 'footer_image'))->toBe([
+        'language' => 'ar',
+        'body' => '<p>Template body</p>',
+        'header_image' => 'documents/images/header.png',
+        'stamp' => 'documents/images/stamp.png',
+        'footer_image' => null,
+    ]);
+
+    $template->update(['body' => '<p>changed</p>']);
+
+    expect($document->refresh()->body)->toBe('<p>Template body</p>');
+});
+
+test('picking a template on the document form fills its fields', function () {
+    Storage::fake('local');
+    $this->actingAs(superAdmin(), 'admin');
+    $header = UploadedFile::fake()->image('header.png', 400, 60)->store('documents/images', 'local');
+    $template = DocumentTemplate::create([
+        'name' => 'Letter',
+        'language' => 'ar',
+        'body' => '<p>Template body</p>',
+        'header_image' => $header,
+        'signature_mode' => 'none',
+        'stamp_mode' => 'default',
+    ]);
+
+    Livewire::test(CreatePdfDocument::class)
+        ->fillForm(['template_id' => $template->id])
+        ->assertSchemaStateSet(['language' => 'ar', 'signature_mode' => 'none'])
+        ->fillForm(['title' => 'From picker'])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $document = PdfDocument::firstWhere('title', 'From picker');
+
+    expect($document->only('template_id', 'language', 'header_image', 'signature_mode'))
+        ->toBe(['template_id' => $template->id, 'language' => 'ar', 'header_image' => $header, 'signature_mode' => 'none'])
+        ->and($document->body)->toContain('Template body');
+
+    // Opening the edit page shows the saved choice and keeps the document's own content.
+    $document->update(['body' => '<p>Edited</p>']);
+
+    Livewire::test(EditPdfDocument::class, ['record' => $document->getRouteKey()])
+        ->assertSchemaStateSet(['template_id' => $template->id])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect($document->refresh()->body)->toContain('Edited');
+
+    $template->delete();
+
+    expect($document->refresh()->template_id)->toBeNull();
+});
+
+test('preview saves the form first and refuses invalid input', function () {
+    $this->actingAs(superAdmin(), 'admin');
+    $document = PdfDocument::create(['title' => 'Before', 'body' => '<p>x</p>']);
+
+    Livewire::test(EditPdfDocument::class, ['record' => $document->getRouteKey()])
+        ->fillForm(['title' => 'After'])
+        ->call('saveForPreview')
+        ->assertReturned(true)
+        ->fillForm(['title' => ''])
+        ->call('saveForPreview')
+        ->assertHasFormErrors(['title' => 'required']);
+
+    expect($document->refresh()->title)->toBe('After');
+});
+
+test('templates use the same fields as new documents', function () {
+    $this->actingAs(superAdmin(), 'admin');
+
+    Livewire::test(CreateDocumentTemplate::class)
+        ->fillForm(['name' => 'Plain', 'language' => 'en', 'body' => '<p>x</p>'])
+        ->call('create')
+        ->assertHasNoFormErrors()
+        ->assertNotified('Template created')
+        ->assertRedirect(DocumentTemplateResource::getUrl('index'));
+
+    expect(DocumentTemplate::firstWhere('name', 'Plain')->body)->toContain('x');
+});
+
+test('signature and stamp follow their default, upload or none choice', function () {
     Storage::fake('local');
     $general = UploadedFile::fake()->image('general.png', 40, 20)->store('settings', 'local');
     $own = UploadedFile::fake()->image('own.png', 40, 20)->store('documents/images', 'local');
@@ -189,20 +299,22 @@ test('a new document falls back to the general signature and stamp only', functi
         'logo' => null,
     ])->save();
 
-    $document = PdfDocument::create(['title' => 'T', 'body' => '<p>x</p>', 'stamp' => $own]);
+    $document = PdfDocument::create(['title' => 'T', 'body' => '<p>x</p>', 'stamp_mode' => 'upload', 'stamp' => $own]);
     $pdf = app(DocumentPdf::class);
     $image = fn (string $name) => (fn () => $this->pdfDocumentImage($document, $name))->call($pdf);
 
     expect($image('signature'))->toBe(Storage::disk('local')->get($general))
         ->and($image('stamp'))->toBe(Storage::disk('local')->get($own))
         ->and($image('header_image'))->toBeNull()
+        ->and($document->update(['signature_mode' => 'none', 'stamp_mode' => 'default']))->toBeTrue()
+        ->and($image('signature'))->toBeNull()
+        ->and($image('stamp'))->toBe(Storage::disk('local')->get($general))
         ->and($pdf->renderPdfDocument($document))->toStartWith('%PDF');
 });
 
 test('roles, users and contact are hidden from the sidebar but stay reachable', function () {
     expect(RoleResource::shouldRegisterNavigation())->toBeFalse()
         ->and(UserResource::shouldRegisterNavigation())->toBeFalse()
-        ->and(DocumentTemplateResource::shouldRegisterNavigation())->toBeFalse()
         ->and(Contact::shouldRegisterNavigation())->toBeFalse()
         ->and(General::shouldRegisterNavigation())->toBeTrue();
 

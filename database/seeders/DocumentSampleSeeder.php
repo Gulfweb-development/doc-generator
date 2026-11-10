@@ -100,6 +100,15 @@ class DocumentSampleSeeder extends Seeder
             ])->save();
         }
 
+        // Template for the current Documents screen: language, body and images.
+        $templates['Letter - Meridian (images)'] = DocumentTemplate::updateOrCreate(['name' => 'Letter - Meridian (images)'], [
+            'language' => 'en',
+            'body' => '<p>Date: </p><p><strong>To:</strong> </p><h3>Subject: </h3><p>Dear ,</p><p></p><p>Yours sincerely,</p>',
+            ...array_combine(PdfDocument::IMAGES, array_map(fn (string $name) => $this->path('meridian', $name), PdfDocument::IMAGES)),
+            'signature_mode' => 'upload',
+            'stamp_mode' => 'upload',
+        ]);
+
         foreach ($this->pdfDocuments() as $title => $sample) {
             $document = PdfDocument::firstOrNew(['title' => $title]);
 
@@ -127,6 +136,8 @@ class DocumentSampleSeeder extends Seeder
                     .'<p>This sample uses every image: header, footer, page background, signature and stamp.</p>'
                     .'<p>Yours sincerely,</p>',
                 ...$meridian(PdfDocument::IMAGES),
+                'signature_mode' => 'upload',
+                'stamp_mode' => 'upload',
             ],
             'خطاب تعريف - سارة محمود' => [
                 'language' => 'ar',
@@ -139,6 +150,8 @@ class DocumentSampleSeeder extends Seeder
                 'background_image' => null,
                 'signature' => null,
                 'stamp' => null,
+                'signature_mode' => 'default',
+                'stamp_mode' => 'default',
             ],
             'Quotation - Office fit-out (no images)' => [
                 'language' => 'en',
@@ -151,6 +164,8 @@ class DocumentSampleSeeder extends Seeder
                 'background_image' => null,
                 'signature' => null,
                 'stamp' => null,
+                'signature_mode' => 'default',
+                'stamp_mode' => 'default',
             ],
         ];
     }

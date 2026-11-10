@@ -6,6 +6,7 @@ use App\Filament\Resources\Documents\Schemas\DocumentContent;
 use App\Filament\Resources\PdfDocuments\Pages\CreatePdfDocument;
 use App\Filament\Resources\PdfDocuments\Pages\EditPdfDocument;
 use App\Filament\Resources\PdfDocuments\Pages\ListPdfDocuments;
+use App\Models\DocumentTemplate;
 use App\Models\PdfDocument;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -17,12 +18,14 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use UnitEnum;
 
 class PdfDocumentResource extends Resource
@@ -58,14 +61,50 @@ class PdfDocumentResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema->components([
+        return $schema->components(static::components(
+            TextInput::make('title')
+                ->required()
+                ->maxLength(255),
+            [static::templateSelect()],
+        ));
+    }
+
+    /** Fills the fields below from a template. The choice is saved, the content is copied, so later template edits do not reach the document. */
+    private static function templateSelect(): Select
+    {
+        return Select::make('template_id')
+            ->label('Template')
+            ->options(fn () => DocumentTemplate::orderBy('name')->pluck('name', 'id'))
+            ->placeholder(__('No template'))
+            ->helperText(__('Choosing a template replaces the language, body, images, signature and stamp below.'))
+            ->live()
+            ->columnSpanFull()
+            ->afterStateUpdated(function (?string $state, Set $set): void {
+                $template = DocumentTemplate::find($state);
+
+                if (! $template) {
+                    return;
+                }
+
+                foreach (PdfDocument::TEMPLATE_FIELDS as $field) {
+                    $value = $template->{$field};
+
+                    // File uploads hold their state as a list of files keyed by id.
+                    $set($field, in_array($field, PdfDocument::IMAGES, true) ? ($value ? [(string) Str::uuid() => $value] : []) : $value);
+                }
+            });
+    }
+
+    /** Shared with templates, which name the first field differently and have no template picker. */
+    public static function components(TextInput $titleField, array $before = []): array
+    {
+        return [
             Section::make(__('Content'))
                 ->columns(2)
                 ->columnSpanFull()
                 ->schema([
-                    TextInput::make('title')
-                        ->required()
-                        ->maxLength(255),
+                    ...$before,
+                    $titleField,
                     Select::make('language')
                         ->label('Document language')
                         ->options(fn (): array => DocumentContent::languages())
@@ -77,7 +116,7 @@ class PdfDocumentResource extends Resource
                         ->columnSpanFull(),
                 ]),
             Section::make(__('Images'))
-                ->description(__('All optional. PNG or JPEG.'))
+                ->description(__('All optional. PNG or JPEG. Default signature and stamp come from General settings.'))
                 ->columns(3)
                 ->columnSpanFull()
                 ->schema([
@@ -87,12 +126,11 @@ class PdfDocumentResource extends Resource
                         ->helperText(__('Full width at the bottom of every page.')),
                     DocumentContent::imageUpload('background_image')
                         ->helperText(__('Fills every page behind the content. Use an A4 shaped image.')),
-                    DocumentContent::imageUpload('signature')
-                        ->helperText(__('Leave empty to use the signature from General settings.')),
-                    DocumentContent::imageUpload('stamp')
-                        ->helperText(__('Leave empty to use the stamp from General settings.')),
+                    // Default uses the signature and stamp from General settings.
+                    DocumentContent::image('signature'),
+                    DocumentContent::image('stamp'),
                 ]),
-        ]);
+        ];
     }
 
     public static function table(Table $table): Table
@@ -138,9 +176,9 @@ class PdfDocumentResource extends Resource
             ]);
     }
 
-    public static function pdfAction(): Action
+    public static function pdfAction(string $name = 'pdf'): Action
     {
-        return Action::make('pdf')
+        return Action::make($name)
             ->label('PDF')
             ->icon(Heroicon::OutlinedDocumentArrowDown)
             ->url(fn (PdfDocument $record): string => route('filament.admin.pdf-documents.pdf', $record))

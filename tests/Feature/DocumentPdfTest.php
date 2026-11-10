@@ -203,7 +203,7 @@ test('sample seeder is repeatable, complete and renders every document', functio
     $imageLetterhead = DocumentLayout::whereNotNull('header_image')->sole();
 
     expect(DocumentLayout::count())->toBe(4)
-        ->and(DocumentTemplate::count())->toBe(8)
+        ->and(DocumentTemplate::count())->toBe(9)
         ->and(Document::count())->toBe(10)
         ->and(DocumentLayout::whereNotNull('logo')->pluck('logo')->unique())->toHaveCount(3)
         ->and(Document::where('layout_id', $imageLetterhead->id)->where('signature_mode', 'default')->where('stamp_mode', 'default')->exists())->toBeTrue()

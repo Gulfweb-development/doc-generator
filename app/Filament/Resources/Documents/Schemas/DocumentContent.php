@@ -67,7 +67,7 @@ class DocumentContent
             ->directory('documents/images');
     }
 
-    private static function image(string $name): Group
+    public static function image(string $name): Group
     {
         return Group::make([
             Radio::make("{$name}_mode")

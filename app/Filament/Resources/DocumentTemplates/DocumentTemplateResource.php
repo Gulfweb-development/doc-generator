@@ -6,6 +6,7 @@ use App\Filament\Resources\Documents\Schemas\DocumentContent;
 use App\Filament\Resources\DocumentTemplates\Pages\CreateDocumentTemplate;
 use App\Filament\Resources\DocumentTemplates\Pages\EditDocumentTemplate;
 use App\Filament\Resources\DocumentTemplates\Pages\ListDocumentTemplates;
+use App\Filament\Resources\PdfDocuments\PdfDocumentResource;
 use App\Models\DocumentTemplate;
 use BackedEnum;
 use Filament\Actions\BulkActionGroup;
@@ -30,8 +31,6 @@ class DocumentTemplateResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
-    protected static bool $shouldRegisterNavigation = false;
-
     public static function getModelLabel(): string
     {
         return __('Template');
@@ -49,13 +48,11 @@ class DocumentTemplateResource extends Resource
 
     public static function form(Schema $schema): Schema
     {
-        return $schema->components([
+        return $schema->components(PdfDocumentResource::components(
             TextInput::make('name')
                 ->required()
-                ->maxLength(255)
-                ->columnSpanFull(),
-            ...DocumentContent::components(),
-        ]);
+                ->maxLength(255),
+        ));
     }
 
     public static function table(Table $table): Table

@@ -14,6 +14,9 @@ class PdfDocument extends Model
 {
     public const IMAGES = ['header_image', 'footer_image', 'background_image', 'signature', 'stamp'];
 
+    /** Copied from a template once. Later template edits do not reach existing documents. */
+    public const TEMPLATE_FIELDS = ['language', 'body', ...self::IMAGES, 'signature_mode', 'stamp_mode'];
+
     protected $guarded = ['id'];
 
     protected function casts(): array
