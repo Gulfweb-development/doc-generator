@@ -56,13 +56,21 @@ class DocumentSampleSeeder extends Seeder
         ],
     ];
 
+    /** Letterhead built from images only: banners, page background, signature and stamp. */
+    private const IMAGE_COMPANY = [
+        'name' => 'Meridian Engineering Services',
+        'initials' => 'ME',
+        'color' => [15, 76, 92],
+        'signatory' => 'Karim Aziz',
+    ];
+
     public function run(): void
     {
         foreach (self::COMPANIES as $key => $company) {
             $this->storeImages($key, $company);
         }
 
-        $layouts = $this->seedLayouts();
+        $layouts = [...$this->seedLayouts(), 'meridian' => $this->seedImageLayout()];
 
         $templates = [];
 
@@ -115,9 +123,50 @@ class DocumentSampleSeeder extends Seeder
         return $layouts;
     }
 
+    private function seedImageLayout(): int
+    {
+        $company = self::IMAGE_COMPANY;
+
+        $images = [
+            'header_image' => $this->drawHeaderBanner($company),
+            'footer_image' => $this->drawFooterBanner($company),
+            'background_image' => $this->drawBackground($company),
+            'signature' => $this->drawSignature($company),
+            'stamp' => $this->drawStamp($company),
+        ];
+
+        $paths = [];
+
+        foreach ($images as $name => $canvas) {
+            ob_start();
+            imagepng($canvas);
+            Storage::disk('local')->put($paths[$name] = $this->path('meridian', $name), ob_get_clean());
+        }
+
+        return DocumentLayout::updateOrCreate(['name' => "{$company['name']} (image letterhead)"], [
+            ...$paths,
+            'header_content' => null,
+            'header_right_content' => null,
+            'logo' => null,
+            'logo_position' => 'left',
+            'accent_color' => sprintf('#%02x%02x%02x', ...$company['color']),
+            'footer_content' => null,
+        ])->id;
+    }
+
     private function templates(): array
     {
         return [
+            'Letter on image letterhead (EN)' => [
+                'company' => 'meridian', 'language' => 'en', 'signature' => 'default', 'stamp' => 'default',
+                'body' => '<p>Ref: {{reference}}<br>Date: {{date}}</p>'
+                    .'<p><strong>To:</strong> {{recipient}}<br>{{recipient_company}}</p>'
+                    .'<h3>Subject: {{subject}}</h3>'
+                    .'<p>Dear {{recipient}},</p>'
+                    .'<p>{{message}}</p>'
+                    .'<p>This letter uses an image letterhead: the header, footer, page background, signature and stamp all come from the letterhead record.</p>'
+                    .'<p>Yours sincerely,</p>',
+            ],
             'Business Letter (EN)' => [
                 'company' => 'horizon', 'language' => 'en', 'signature' => true, 'stamp' => false,
                 'body' => '<p>Ref: {{reference}}<br>Date: {{date}}</p>'
@@ -194,6 +243,15 @@ class DocumentSampleSeeder extends Seeder
         ];
 
         return [
+            'Letter - Site visit confirmation (image letterhead)' => [
+                'template' => 'Letter on image letterhead (EN)',
+                'values' => [
+                    'recipient' => 'Eng. Salma Haddad',
+                    'recipient_company' => 'Crescent Retail Group',
+                    'subject' => 'Confirmation of site inspection',
+                    'message' => 'We confirm that our team will inspect the new warehouse site on 20 November 2026 and share the structural report within five working days.',
+                ],
+            ],
             'Letter - Partnership renewal' => [
                 'template' => 'Business Letter (EN)',
                 'values' => [
@@ -330,8 +388,13 @@ class DocumentSampleSeeder extends Seeder
             .'</tbody></table>';
     }
 
-    private function image(string $company, string $name, bool $enabled): array
+    /** @param  bool|'default'  $enabled  'default' takes the image from the letterhead or General settings. */
+    private function image(string $company, string $name, bool|string $enabled): array
     {
+        if ($enabled === 'default') {
+            return ["{$name}_mode" => 'default', $name => null];
+        }
+
         return [
             "{$name}_mode" => $enabled ? 'upload' : 'none',
             $name => $enabled ? $this->path($company, $name) : null,
@@ -403,6 +466,49 @@ class DocumentSampleSeeder extends Seeder
         $this->text($canvas, $company['initials'], 44, 0, 150, 85, $ink, 'DejaVuSans-Bold');
         $this->text($canvas, 'APPROVED', 26, 0, 150, 155, $ink, 'DejaVuSans-Bold');
         $this->text($canvas, 'SAMPLE', 20, 0, 150, 215, $ink, 'DejaVuSans-Bold');
+
+        return $canvas;
+    }
+
+    /** Content width is 162 mm, so 1620 px wide keeps 10 px per mm. */
+    private function drawHeaderBanner(array $company): GdImage
+    {
+        $canvas = $this->canvas(1620, 230);
+        $accent = imagecolorallocate($canvas, ...$company['color']);
+        $white = imagecolorallocate($canvas, 255, 255, 255);
+        $gold = imagecolorallocate($canvas, 201, 162, 39);
+
+        imagefilledrectangle($canvas, 0, 0, 1619, 200, $accent);
+        imagefilledrectangle($canvas, 0, 208, 1619, 216, $gold);
+        imagefilledellipse($canvas, 110, 100, 150, 150, $white);
+        $this->text($canvas, $company['initials'], 44, 0, 110, 100, $accent, 'DejaVuSans-Bold');
+        imagettftext($canvas, 44, 0, 220, 105, $white, base_path('vendor/mpdf/mpdf/ttfonts/DejaVuSans-Bold.ttf'), $company['name']);
+        imagettftext($canvas, 22, 0, 222, 155, $white, base_path('vendor/mpdf/mpdf/ttfonts/DejaVuSans.ttf'), 'Structural design, site supervision, inspections');
+
+        return $canvas;
+    }
+
+    private function drawFooterBanner(array $company): GdImage
+    {
+        $canvas = $this->canvas(1620, 80);
+        $accent = imagecolorallocate($canvas, ...$company['color']);
+
+        imagefilledrectangle($canvas, 0, 0, 1619, 4, $accent);
+        $this->text($canvas, 'Meridian Engineering Services   |   Industrial Area, Shuwaikh   |   projects@meridian.test   |   +965 0000 0000', 20, 0, 810, 45, $accent, 'DejaVuSans');
+
+        return $canvas;
+    }
+
+    /** A4 at 6 px per mm. Kept faint so body text stays readable on top. */
+    private function drawBackground(array $company): GdImage
+    {
+        $canvas = imagecreatetruecolor(1260, 1782);
+        imagefill($canvas, 0, 0, imagecolorallocate($canvas, 255, 255, 255));
+        $tint = imagecolorallocate($canvas, 236, 243, 245);
+
+        imagefilledpolygon($canvas, [1260, 1180, 1260, 1782, 660, 1782], $tint);
+        imagefilledpolygon($canvas, [0, 0, 380, 0, 0, 380], $tint);
+        $this->text($canvas, $company['initials'], 300, 30, 630, 900, imagecolorallocate($canvas, 244, 248, 249), 'DejaVuSans-Bold');
 
         return $canvas;
     }

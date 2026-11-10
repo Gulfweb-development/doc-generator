@@ -13,6 +13,7 @@ use App\Filament\Resources\Roles\RoleResource;
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
 use App\Filament\Resources\Users\Pages\ListUsers;
+use App\Filament\Resources\Users\UserResource;
 use App\Models\Admin;
 use App\Models\Document;
 use App\Models\DocumentLayout;
@@ -110,8 +111,9 @@ test('super admins can open every panel page', function (string $uri) {
     'create layout' => '/admin/document-layouts/create',
 ]);
 
-test('roles and contact are hidden from the sidebar but stay reachable', function () {
+test('roles, users and contact are hidden from the sidebar but stay reachable', function () {
     expect(RoleResource::shouldRegisterNavigation())->toBeFalse()
+        ->and(UserResource::shouldRegisterNavigation())->toBeFalse()
         ->and(Contact::shouldRegisterNavigation())->toBeFalse()
         ->and(General::shouldRegisterNavigation())->toBeTrue();
 
@@ -301,6 +303,27 @@ test('a document from a template copies its content once', function () {
     $template->update(['body' => '<p>changed</p>']);
 
     expect($document->refresh()->body)->toBe('<p>{{client}}</p>');
+});
+
+test('letterhead images render and its signature and stamp beat general settings', function () {
+    Storage::fake('local');
+    $store = fn (string $name) => UploadedFile::fake()->image("{$name}.png", 40, 20)->store('documents/images', 'local');
+
+    $letterhead = DocumentLayout::create([
+        'name' => 'Images',
+        'header_content' => '<p>Head text</p>',
+        ...collect(['header_image', 'footer_image', 'background_image', 'signature', 'stamp'])
+            ->mapWithKeys(fn (string $name) => [$name => $store($name)]),
+    ]);
+    $document = Document::create(['title' => 'T', 'layout_id' => $letterhead->id, 'body' => '<p>x</p>']);
+    $pdf = app(DocumentPdf::class);
+
+    foreach (['signature', 'stamp'] as $name) {
+        expect((fn () => $this->image($document, $name))->call($pdf))
+            ->toBe(Storage::disk('local')->get($letterhead->{$name}));
+    }
+
+    expect($pdf->render($document))->toStartWith('%PDF');
 });
 
 test('document language reads the same on the form and both lists', function () {

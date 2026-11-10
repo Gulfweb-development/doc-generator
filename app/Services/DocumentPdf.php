@@ -46,10 +46,21 @@ class DocumentPdf
 
         $mpdf->SetDirectionality($direction);
 
-        // Binding edge band: left in English, right in Arabic, on every page. mPDF ignores
-        // fixed positioning in headers, so it goes through the watermark image layer instead.
-        $mpdf->imageVars['band'] = $this->solidPixel($accent);
-        $mpdf->SetWatermarkImage('var:band', 1, [3.5, 297], [$direction === 'rtl' ? 206.5 : 0, 0]);
+        foreach (['header_image', 'footer_image', 'background_image'] as $name) {
+            if ($image = $this->bytes('local', $document->layout?->{$name})) {
+                $mpdf->imageVars[$name] = $image;
+            }
+        }
+
+        // mPDF ignores fixed positioning in headers, so page-wide images go through the
+        // watermark image layer, which holds one image: the background, or else the edge band
+        // (left in English, right in Arabic).
+        if (isset($mpdf->imageVars['background_image'])) {
+            $mpdf->SetWatermarkImage('var:background_image', 1, [210, 297], [0, 0]);
+        } else {
+            $mpdf->imageVars['band'] = $this->solidPixel($accent);
+            $mpdf->SetWatermarkImage('var:band', 1, [3.5, 297], [$direction === 'rtl' ? 206.5 : 0, 0]);
+        }
         $mpdf->showWatermarkImage = true;
         $mpdf->watermarkImgBehind = true;
 
@@ -82,10 +93,12 @@ class DocumentPdf
             'content' => $this->content($document, $document->layout?->header_content),
             'rightContent' => $this->content($document, $document->layout?->header_right_content),
             'logo' => $has('logo'),
+            'banner' => $has('header_image'),
             'position' => $document->layout?->logo_position ?? 'left',
             'direction' => $direction,
         ])->render());
         $mpdf->SetHTMLFooter(view('pdf.footer', [
+            'banner' => $has('footer_image'),
             'content' => $this->content($document, $document->layout?->footer_content),
             'pageNumber' => trans('Page :x of :y', ['x' => '{PAGENO}', 'y' => '{nbpg}'], $document->language),
             'direction' => $direction,
@@ -155,6 +168,11 @@ class DocumentPdf
             default => $this->defaultImage($document, $name),
         };
 
+        return $this->bytes($disk, $path);
+    }
+
+    private function bytes(?string $disk, ?string $path): ?string
+    {
         if (blank($path) || ! Storage::disk($disk)->exists($path)) {
             return null;
         }
@@ -167,8 +185,14 @@ class DocumentPdf
 
     private function defaultImage(Document $document, string $name): array
     {
-        if ($name === 'logo' && filled($document->layout?->logo)) {
-            return ['local', $document->layout->logo];
+        // Letterhead first, then General settings.
+        if (filled($document->layout?->{$name})) {
+            return ['local', $document->layout->{$name}];
+        }
+
+        // A header banner usually carries the brand already, so the site logo is not added beside it.
+        if ($name === 'logo' && filled($document->layout?->header_image)) {
+            return [null, null];
         }
 
         // The site logo is public because the panel shows it. Signature and stamp stay private.

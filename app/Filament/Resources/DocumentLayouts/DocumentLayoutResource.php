@@ -68,13 +68,16 @@ class DocumentLayoutResource extends Resource
                 ->columns(2)
                 ->columnSpanFull()
                 ->schema([
+                    DocumentContent::imageUpload('header_image')
+                        ->columnSpanFull()
+                        ->helperText(__('Optional. A full-width banner printed above the logo and header text. Any of them can be left empty.')),
                     DocumentContent::editor('header_content')
                         ->label('Left content'),
                     DocumentContent::editor('header_right_content')
                         ->label('Right content')
                         ->helperText(__('Optional. Shown at the right edge of the header, for example the company name in a second language.')),
                     DocumentContent::imageUpload('logo')
-                        ->helperText(__('Leave empty to use the logo from General settings.')),
+                        ->helperText(__('Leave empty to use the logo from General settings, unless a header image is set.')),
                     Select::make('logo_position')
                         ->options([
                             'left' => __('Left'),
@@ -90,9 +93,23 @@ class DocumentLayoutResource extends Resource
             Section::make(__('Footer'))
                 ->columnSpanFull()
                 ->schema([
+                    DocumentContent::imageUpload('footer_image')
+                        ->helperText(__('Optional. A full-width banner printed above the footer text and page numbers.')),
                     DocumentContent::editor('footer_content')
                         ->label('Content')
                         ->helperText(__('Page numbers are added automatically.')),
+                ]),
+            Section::make(__('Background, signature and stamp'))
+                ->description(__('All optional.'))
+                ->columns(3)
+                ->columnSpanFull()
+                ->schema([
+                    DocumentContent::imageUpload('background_image')
+                        ->helperText(__('Fills every page behind the content, for example a pre-printed letterhead design. Replaces the edge band.')),
+                    DocumentContent::imageUpload('signature')
+                        ->helperText(__('Used by documents set to the default signature. Leave empty to use General settings.')),
+                    DocumentContent::imageUpload('stamp')
+                        ->helperText(__('Used by documents set to the default stamp. Leave empty to use General settings.')),
                 ]),
         ]);
     }

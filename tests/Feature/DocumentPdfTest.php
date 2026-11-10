@@ -96,6 +96,42 @@ test('header columns follow the logo position and empty right content changes no
     'logo right' => ['right', ['LEFT', 'RIGHT', 'var:logo']],
 ]);
 
+test('a header banner prints above the logo and both text columns', function () {
+    $html = view('pdf.header', [
+        'content' => 'LEFT',
+        'rightContent' => 'RIGHT',
+        'logo' => true,
+        'banner' => true,
+        'position' => 'left',
+        'direction' => 'ltr',
+    ])->render();
+
+    $positions = collect(['var:header_image', 'var:logo', 'LEFT', 'RIGHT'])->map(fn (string $part) => strpos($html, $part));
+
+    expect($positions)->not->toContain(false)
+        ->and($positions->all())->toBe($positions->sort()->values()->all());
+
+    $bannerOnly = view('pdf.header', [
+        'content' => '', 'rightContent' => '', 'logo' => false, 'banner' => true, 'position' => 'left', 'direction' => 'ltr',
+    ])->render();
+
+    expect($bannerOnly)->toContain('var:header_image')->not->toContain('letterhead-rule');
+});
+
+test('with a header banner only the letterhead own logo is used', function () {
+    $pdf = app(DocumentPdf::class);
+    $source = fn (Document $document) => (fn () => $this->defaultImage($document, 'logo'))->call($pdf);
+
+    $letterhead = DocumentLayout::create(['name' => 'B', 'header_image' => 'banner.png']);
+    $document = Document::create(['title' => 'T', 'layout_id' => $letterhead->id, 'body' => '<p>x</p>']);
+
+    expect($source($document->load('layout')))->toBe([null, null]);
+
+    $letterhead->update(['logo' => 'own-logo.png']);
+
+    expect($source($document->load('layout')))->toBe(['local', 'own-logo.png']);
+});
+
 test('right header content is sanitized and fills placeholders', function () {
     $letterhead = DocumentLayout::create([
         'name' => 'H',
@@ -156,13 +192,20 @@ test('sample seeder is repeatable, complete and renders every document', functio
 
     $this->seed(DocumentSampleSeeder::class);
 
-    expect(DocumentLayout::count())->toBe(3)
-        ->and(DocumentTemplate::count())->toBe(7)
-        ->and(Document::count())->toBe(9)
-        ->and(DocumentLayout::pluck('logo')->unique())->toHaveCount(3)
+    $imageLetterhead = DocumentLayout::whereNotNull('header_image')->sole();
+
+    expect(DocumentLayout::count())->toBe(4)
+        ->and(DocumentTemplate::count())->toBe(8)
+        ->and(Document::count())->toBe(10)
+        ->and(DocumentLayout::whereNotNull('logo')->pluck('logo')->unique())->toHaveCount(3)
+        ->and(Document::where('layout_id', $imageLetterhead->id)->where('signature_mode', 'default')->where('stamp_mode', 'default')->exists())->toBeTrue()
         ->and(Document::pluck('language')->unique()->sort()->values()->all())->toBe(['ar', 'en'])
         ->and($final->refresh()->reference)->toBe($reference)
         ->and($final->isFinal())->toBeTrue();
+
+    foreach (['header_image', 'footer_image', 'background_image', 'signature', 'stamp'] as $image) {
+        Storage::disk('local')->assertExists($imageLetterhead->{$image});
+    }
 
     foreach (Document::all() as $document) {
         expect($document->missingPlaceholders())->toBe([])

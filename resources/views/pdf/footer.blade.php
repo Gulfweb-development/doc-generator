@@ -1,3 +1,6 @@
+@if ($banner)
+    <div style="margin-bottom: 1.5mm;"><img src="var:footer_image" style="width: 100%;"></div>
+@endif
 <table class="plain footline">
     <tr>
         <td>{!! $content !!}</td>
