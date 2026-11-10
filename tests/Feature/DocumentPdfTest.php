@@ -3,6 +3,7 @@
 use App\Models\Document;
 use App\Models\DocumentLayout;
 use App\Models\DocumentTemplate;
+use App\Models\PdfDocument;
 use App\Services\DocumentPdf;
 use Database\Seeders\DocumentSampleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -96,26 +97,33 @@ test('header columns follow the logo position and empty right content changes no
     'logo right' => ['right', ['LEFT', 'RIGHT', 'var:logo']],
 ]);
 
-test('a header banner prints above the logo and both text columns', function () {
-    $html = view('pdf.header', [
-        'content' => 'LEFT',
-        'rightContent' => 'RIGHT',
-        'logo' => true,
-        'banner' => true,
-        'position' => 'left',
-        'direction' => 'ltr',
-    ])->render();
+test('header and footer images reach the page edges', function () {
+    $solid = function (int $width, int $height, array $rgb): string {
+        $image = imagecreatetruecolor($width, $height);
+        imagefill($image, 0, 0, imagecolorallocate($image, ...$rgb));
+        ob_start();
+        imagepng($image);
 
-    $positions = collect(['var:header_image', 'var:logo', 'LEFT', 'RIGHT'])->map(fn (string $part) => strpos($html, $part));
+        return ob_get_clean();
+    };
 
-    expect($positions)->not->toContain(false)
-        ->and($positions->all())->toBe($positions->sort()->values()->all());
+    $pdf = app(DocumentPdf::class);
+    $images = ['header_image' => $solid(420, 42, [255, 0, 0]), 'footer_image' => $solid(420, 21, [0, 0, 255])];
+    $page = imagecreatefromstring((fn () => $this->pageLayer($images, null, 'ltr'))->call($pdf));
+    $color = fn (int $x, int $y) => imagecolorsforindex($page, imagecolorat($page, $x, $y));
+
+    // 1240 px wide page: the header is 124 px tall, the footer 62 px.
+    expect($color(0, 0))->toMatchArray(['red' => 255, 'blue' => 0])
+        ->and($color(1239, 120))->toMatchArray(['red' => 255, 'blue' => 0])
+        ->and($color(600, 130))->toMatchArray(['red' => 255, 'green' => 255, 'blue' => 255])
+        ->and($color(0, 1753))->toMatchArray(['red' => 0, 'blue' => 255])
+        ->and((fn () => $this->bannerHeightMm($images['header_image']))->call($pdf))->toBe(21.0);
 
     $bannerOnly = view('pdf.header', [
-        'content' => '', 'rightContent' => '', 'logo' => false, 'banner' => true, 'position' => 'left', 'direction' => 'ltr',
+        'content' => '', 'rightContent' => '', 'logo' => false, 'position' => 'left', 'direction' => 'ltr',
     ])->render();
 
-    expect($bannerOnly)->toContain('var:header_image')->not->toContain('letterhead-rule');
+    expect($bannerOnly)->not->toContain('letterhead-rule');
 });
 
 test('with a header banner only the letterhead own logo is used', function () {
@@ -205,6 +213,19 @@ test('sample seeder is repeatable, complete and renders every document', functio
 
     foreach (['header_image', 'footer_image', 'background_image', 'signature', 'stamp'] as $image) {
         Storage::disk('local')->assertExists($imageLetterhead->{$image});
+    }
+
+    expect(PdfDocument::count())->toBe(3)
+        ->and(PdfDocument::pluck('language')->unique()->sort()->values()->all())->toBe(['ar', 'en']);
+
+    foreach (PdfDocument::all() as $document) {
+        foreach (PdfDocument::IMAGES as $image) {
+            if ($document->{$image} !== null) {
+                Storage::disk('local')->assertExists($document->{$image});
+            }
+        }
+
+        expect(app(DocumentPdf::class)->renderPdfDocument($document))->toStartWith('%PDF');
     }
 
     foreach (Document::all() as $document) {

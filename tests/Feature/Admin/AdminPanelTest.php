@@ -3,6 +3,7 @@
 use App\Filament\Pages\Contact;
 use App\Filament\Pages\General;
 use App\Filament\Resources\Admins\Pages\CreateAdmin;
+use App\Filament\Resources\DocumentLayouts\DocumentLayoutResource;
 use App\Filament\Resources\DocumentLayouts\Pages\CreateDocumentLayout;
 use App\Filament\Resources\DocumentLayouts\Pages\ListDocumentLayouts;
 use App\Filament\Resources\Documents\DocumentResource;
@@ -10,6 +11,10 @@ use App\Filament\Resources\Documents\Pages\EditDocument;
 use App\Filament\Resources\Documents\Pages\ListDocuments;
 use App\Filament\Resources\DocumentTemplates\DocumentTemplateResource;
 use App\Filament\Resources\DocumentTemplates\Pages\ListDocumentTemplates;
+use App\Filament\Resources\PdfDocuments\Pages\CreatePdfDocument;
+use App\Filament\Resources\PdfDocuments\Pages\EditPdfDocument;
+use App\Filament\Resources\PdfDocuments\Pages\ListPdfDocuments;
+use App\Filament\Resources\PdfDocuments\PdfDocumentResource;
 use App\Filament\Resources\Roles\RoleResource;
 use App\Filament\Resources\Users\Pages\CreateUser;
 use App\Filament\Resources\Users\Pages\EditUser;
@@ -19,6 +24,7 @@ use App\Models\Admin;
 use App\Models\Document;
 use App\Models\DocumentLayout;
 use App\Models\DocumentTemplate;
+use App\Models\PdfDocument;
 use App\Models\User;
 use App\Services\DocumentPdf;
 use App\Settings\GeneralSettings;
@@ -111,6 +117,87 @@ test('super admins can open every panel page', function (string $uri) {
     'layouts' => '/admin/document-layouts',
     'create layout' => '/admin/document-layouts/create',
 ]);
+
+test('the sidebar shows the new documents and hides the old documents and letterheads', function () {
+    expect(PdfDocumentResource::shouldRegisterNavigation())->toBeTrue()
+        ->and(DocumentResource::shouldRegisterNavigation())->toBeFalse()
+        ->and(DocumentLayoutResource::shouldRegisterNavigation())->toBeFalse();
+
+    $this->actingAs(superAdmin(), 'admin');
+
+    $this->get('/admin/pdf-documents')->assertOk();
+    $this->get('/admin/pdf-documents/create')->assertOk();
+});
+
+test('a new document saves its images, previews, finalizes and locks', function () {
+    Storage::fake('local');
+    $this->actingAs(superAdmin(), 'admin');
+
+    Livewire::test(CreatePdfDocument::class)
+        ->fillForm([
+            'title' => 'Offer letter',
+            'language' => 'ar',
+            'body' => '<p>مرحبا {{name}}</p>',
+            'header_image' => UploadedFile::fake()->image('header.png', 400, 60),
+            'stamp' => UploadedFile::fake()->image('stamp.png', 80, 80),
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    $document = PdfDocument::firstWhere('title', 'Offer letter');
+
+    expect($document->language)->toBe('ar')
+        ->and($document->footer_image)->toBeNull();
+    Storage::disk('local')->assertExists([$document->header_image, $document->stamp]);
+
+    $this->get(route('filament.admin.pdf-documents.pdf', $document))
+        ->assertOk()
+        ->assertHeader('Content-Type', 'application/pdf');
+
+    Livewire::test(EditPdfDocument::class, ['record' => $document->getRouteKey()])
+        ->callAction('finalize');
+
+    $document->refresh();
+
+    expect($document->reference)->toBe('DOC-'.now()->year.'-0001')
+        ->and(PdfDocumentResource::canEdit($document))->toBeFalse()
+        ->and(PdfDocumentResource::canDelete($document))->toBeTrue();
+    Storage::disk('local')->assertExists($document->pdf_path);
+
+    Livewire::test(ListPdfDocuments::class)
+        ->assertTableActionHidden('edit', $document)
+        ->assertTableActionVisible('pdf', $document)
+        ->assertTableActionVisible('delete', $document);
+
+    Livewire::test(EditPdfDocument::class, ['record' => $document->getRouteKey()])
+        ->assertRedirect(PdfDocumentResource::getUrl('index'))
+        ->assertNotified('This document is finalized');
+
+    Livewire::test(ListPdfDocuments::class)->callTableAction('delete', $document);
+
+    expect(PdfDocument::find($document->id))->toBeNull();
+    Storage::disk('local')->assertMissing($document->pdf_path);
+});
+
+test('a new document falls back to the general signature and stamp only', function () {
+    Storage::fake('local');
+    $general = UploadedFile::fake()->image('general.png', 40, 20)->store('settings', 'local');
+    $own = UploadedFile::fake()->image('own.png', 40, 20)->store('documents/images', 'local');
+    app(GeneralSettings::class)->fill([
+        'signature' => $general,
+        'stamp' => $general,
+        'logo' => null,
+    ])->save();
+
+    $document = PdfDocument::create(['title' => 'T', 'body' => '<p>x</p>', 'stamp' => $own]);
+    $pdf = app(DocumentPdf::class);
+    $image = fn (string $name) => (fn () => $this->pdfDocumentImage($document, $name))->call($pdf);
+
+    expect($image('signature'))->toBe(Storage::disk('local')->get($general))
+        ->and($image('stamp'))->toBe(Storage::disk('local')->get($own))
+        ->and($image('header_image'))->toBeNull()
+        ->and($pdf->renderPdfDocument($document))->toStartWith('%PDF');
+});
 
 test('roles, users and contact are hidden from the sidebar but stay reachable', function () {
     expect(RoleResource::shouldRegisterNavigation())->toBeFalse()

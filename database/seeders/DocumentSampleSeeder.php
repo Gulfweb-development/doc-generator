@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Document;
 use App\Models\DocumentLayout;
 use App\Models\DocumentTemplate;
+use App\Models\PdfDocument;
 use GdImage;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Storage;
@@ -99,7 +100,59 @@ class DocumentSampleSeeder extends Seeder
             ])->save();
         }
 
-        $this->command?->info(count($layouts).' letterheads, '.count($templates).' templates, '.count($this->documents()).' documents seeded.');
+        foreach ($this->pdfDocuments() as $title => $sample) {
+            $document = PdfDocument::firstOrNew(['title' => $title]);
+
+            if (! $document->isFinal()) {
+                $document->fill($sample)->save();
+            }
+        }
+
+        $this->command?->info(count($layouts).' letterheads, '.count($templates).' templates, '.count($this->documents()).' old documents, '.count($this->pdfDocuments()).' documents seeded.');
+    }
+
+    /** Samples for the current Documents screen. Images reuse the files stored above. */
+    private function pdfDocuments(): array
+    {
+        $meridian = fn (array $names): array => array_combine($names, array_map(fn (string $name) => $this->path('meridian', $name), $names));
+
+        return [
+            'Site inspection confirmation - Crescent Retail' => [
+                'language' => 'en',
+                'body' => '<p>Date: 10 November 2026</p>'
+                    .'<p><strong>To:</strong> Eng. Salma Haddad<br>Crescent Retail Group</p>'
+                    .'<h3>Subject: Confirmation of site inspection</h3>'
+                    .'<p>Dear Eng. Salma,</p>'
+                    .'<p>We confirm that our team will inspect the new warehouse site on 20 November 2026 and share the structural report within five working days.</p>'
+                    .'<p>This sample uses every image: header, footer, page background, signature and stamp.</p>'
+                    .'<p>Yours sincerely,</p>',
+                ...$meridian(PdfDocument::IMAGES),
+            ],
+            'خطاب تعريف - سارة محمود' => [
+                'language' => 'ar',
+                'body' => '<h2 style="text-align: center">خطاب تعريف</h2>'
+                    .'<p>إلى من يهمه الأمر،</p>'
+                    .'<p>نفيدكم بأن السيدة <strong>سارة محمود</strong> تعمل لدينا بوظيفة مهندسة مدنية منذ ١ مارس ٢٠٢٢، وما زالت على رأس عملها حتى تاريخه.</p>'
+                    .'<p>وقد أعطي لها هذا الخطاب بناءً على طلبها دون أدنى مسؤولية على الشركة.</p>'
+                    .'<p>هذا المثال يستخدم صورة الرأس والتذييل فقط، والتوقيع والختم من الإعدادات العامة.</p>',
+                ...$meridian(['header_image', 'footer_image']),
+                'background_image' => null,
+                'signature' => null,
+                'stamp' => null,
+            ],
+            'Quotation - Office fit-out (no images)' => [
+                'language' => 'en',
+                'body' => '<h1>Quotation</h1>'
+                    .$this->partiesTable('Prepared for', 'Blue Harbor Logistics', 'Quotation details', 'Date: 10 November 2026<br>Valid until: 10 December 2026')
+                    .$this->pricedTable(self::STANDARD_ITEMS)
+                    .'<p>This sample has no images of its own, so only the General settings signature and stamp appear.</p>',
+                'header_image' => null,
+                'footer_image' => null,
+                'background_image' => null,
+                'signature' => null,
+                'stamp' => null,
+            ],
+        ];
     }
 
     private function seedLayouts(): array

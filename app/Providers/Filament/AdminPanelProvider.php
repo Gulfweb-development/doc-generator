@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use AchyutN\FilamentLogViewer\FilamentLogViewer;
 use App\Http\Controllers\DocumentPdfController;
+use App\Http\Controllers\PdfDocumentPdfController;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -85,6 +86,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authenticatedRoutes(function (): void {
                 Route::get('documents/{document}/pdf', DocumentPdfController::class)->name('documents.pdf');
+                Route::get('pdf-documents/{pdfDocument}/pdf', PdfDocumentPdfController::class)->name('pdf-documents.pdf');
             })
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_BEFORE, fn (): string => view('components/developer-login')->render())
             ->authMiddleware([

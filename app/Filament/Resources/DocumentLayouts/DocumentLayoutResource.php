@@ -35,6 +35,8 @@ class DocumentLayoutResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'name';
 
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function getModelLabel(): string
     {
         return __('Letterhead');

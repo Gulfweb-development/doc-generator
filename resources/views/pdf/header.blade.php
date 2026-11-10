@@ -1,8 +1,5 @@
 @php($logoHtml = $logo ? '<img src="var:logo" style="max-height: 16mm; max-width: 45mm;">' : '')
-@if ($banner ?? false)
-<div style="margin-bottom: 2mm;"><img src="var:header_image" style="width: 100%;"></div>
-@endif
-{{-- Each part prints only when filled in, so a banner can stand alone or sit above logo and text. --}}
+{{-- The header image is drawn edge to edge on the page layer; this part starts below it and prints only when filled in. --}}
 @if ($logo || $content !== '' || $rightContent !== '')
 <div class="letterhead">
     @if ($position === 'center' && $rightContent === '')

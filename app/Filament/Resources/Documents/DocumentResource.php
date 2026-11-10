@@ -26,6 +26,9 @@ class DocumentResource extends Resource
 
     protected static ?string $recordTitleAttribute = 'title';
 
+    // Replaced by PdfDocumentResource; kept reachable by URL for existing records.
+    protected static bool $shouldRegisterNavigation = false;
+
     public static function getModelLabel(): string
     {
         return __('Document');
