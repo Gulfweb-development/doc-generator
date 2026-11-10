@@ -21,7 +21,8 @@ class ListDocuments extends ListRecords
             Action::make('fromTemplate')
                 ->label(__('New from template'))
                 ->color('gray')
-                ->visible(fn (): bool => DocumentResource::canCreate())
+                // Hidden on request; switch back to DocumentResource::canCreate() to show it again.
+                ->visible(false)
                 ->schema([
                     Select::make('template_id')
                         ->label('Template')

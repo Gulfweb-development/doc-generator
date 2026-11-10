@@ -37,7 +37,6 @@ class DocumentContent
                 ->default(fn () => DocumentLayout::defaultId()),
             static::editor('body')
                 ->required()
-                ->helperText(__('Use {{name}} for values to fill per document. {{reference}} and {{date}} are filled automatically.'))
                 ->columnSpanFull(),
             ...$afterBody,
             Section::make(__('Logo, signature and stamp'))
