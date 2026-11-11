@@ -72,7 +72,7 @@ class AdminPanelProvider extends PanelProvider
                 DispatchServingFilamentEvent::class,
             ])
             ->plugins([
-                FilamentShieldPlugin::make()->globallySearchable(false)->registerNavigation(false),
+                FilamentShieldPlugin::make()->globallySearchable(false),
                 FilamentLoggerPlugin::make(),
                 FilamentLogViewer::make()->authorize(fn (): bool => (bool) auth()->user()?->can('View:LogTable')),
                 SpatieTranslatablePlugin::make()->persist(),

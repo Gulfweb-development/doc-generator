@@ -173,8 +173,11 @@ return [
                 'delete',
             ],
         ],
+        // Unused resources (hidden from navigation), so keep them off the role form.
         'exclude' => [
-            //
+            \App\Filament\Resources\Users\UserResource::class,
+            \App\Filament\Resources\Documents\DocumentResource::class,
+            \App\Filament\Resources\DocumentLayouts\DocumentLayoutResource::class,
         ],
     ],
 
