@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\PdfDocuments\Pages;
 
+use App\Filament\Resources\DocumentTemplates\DocumentTemplateResource;
 use App\Filament\Resources\PdfDocuments\PdfDocumentResource;
 use App\Models\DocumentTemplate;
 use App\Models\PdfDocument;
@@ -21,7 +22,7 @@ class ListPdfDocuments extends ListRecords
             Action::make('fromTemplate')
                 ->label(__('New from template'))
                 ->color('gray')
-                ->visible(fn (): bool => PdfDocumentResource::canCreate())
+                ->visible(fn (): bool => PdfDocumentResource::canCreate() && DocumentTemplateResource::canViewAny())
                 ->schema([
                     Select::make('template_id')
                         ->label('Template')

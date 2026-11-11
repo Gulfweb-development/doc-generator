@@ -74,7 +74,7 @@ class AdminPanelProvider extends PanelProvider
             ->plugins([
                 FilamentShieldPlugin::make()->globallySearchable(false)->registerNavigation(false),
                 FilamentLoggerPlugin::make(),
-                FilamentLogViewer::make(),
+                FilamentLogViewer::make()->authorize(fn (): bool => (bool) auth()->user()?->can('View:LogTable')),
                 SpatieTranslatablePlugin::make()->persist(),
             ])
             // Closures so the labels still match after the locale switches to Arabic.
