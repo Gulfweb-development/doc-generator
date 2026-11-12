@@ -14,6 +14,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -56,8 +57,22 @@ class DocumentTemplateResource extends Resource
             TextInput::make('name')
                 ->required()
                 ->maxLength(255),
+            after: [
+                Select::make('admins')
+                    ->label(__('Assigned Users'))
+                    ->relationship('admins', 'name')
+                    ->multiple()
+                    ->preload()
+                    ->helperText(__('Only these users can see and use this template. Super admins see every template.'))
+                    ->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false),
+            ],
             withBody: false,
         ));
+    }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->visibleToAdmin();
     }
 
     public static function table(Table $table): Table

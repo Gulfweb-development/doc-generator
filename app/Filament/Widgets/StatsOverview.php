@@ -2,6 +2,9 @@
 
 namespace App\Filament\Widgets;
 
+use App\Filament\Resources\DocumentLayouts\DocumentLayoutResource;
+use App\Filament\Resources\Documents\DocumentResource;
+use App\Filament\Resources\Users\UserResource;
 use BezhanSalleh\FilamentShield\Traits\HasWidgetShield;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
@@ -14,19 +17,23 @@ class StatsOverview extends BaseWidget
     protected function getStats(): array
     {
         $stats = [];
-        $exclude = [];
+        $exclude = [
+            DocumentLayoutResource::class,
+            DocumentResource::class,
+            UserResource::class,
+        ];
         $custom = [];
 
         foreach (filament()->getResources() as $path) {
+            if (in_array($path, $exclude)) {
+                continue;
+            }
+
             $label = __($path::getLabel());
             if (! $label) {
                 $classBaseName = class_basename($path);
                 $rawName = Str::before($classBaseName, 'Resource');
                 $label = Str::headline($rawName);
-            }
-
-            if (in_array($label, $exclude)) {
-                continue;
             }
 
             $icon = $path::getNavigationIcon();

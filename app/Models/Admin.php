@@ -7,6 +7,7 @@ use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\MediaLibrary\HasMedia;
@@ -58,6 +59,16 @@ class Admin extends Authenticatable implements FilamentUser, HasMedia
         $url = $this->getFirstMediaUrl('admins');
 
         return $url ?: 'https://ui-avatars.com/api/?name='.urlencode($this->name);
+    }
+
+    public function documentTemplates(): BelongsToMany
+    {
+        return $this->belongsToMany(DocumentTemplate::class);
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasRole(config('filament-shield.super_admin.name'));
     }
 
     public function canAccessPanel(Panel $panel): bool

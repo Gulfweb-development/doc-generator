@@ -35,6 +35,14 @@ class AdminForm
                     ->multiple()
                     ->preload()
                     ->searchable(),
+                Select::make('documentTemplates')
+                    ->label(__('Assigned templates'))
+                    ->relationship('documentTemplates', 'name')
+                    ->multiple()
+                    ->preload()
+                    ->searchable()
+                    ->helperText(__('Templates this admin can see and use. Super admins see every template.'))
+                    ->visible(fn (): bool => auth()->user()?->isSuperAdmin() ?? false),
             ]);
     }
 }

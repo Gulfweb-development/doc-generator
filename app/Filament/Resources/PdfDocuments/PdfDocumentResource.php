@@ -88,16 +88,17 @@ class PdfDocumentResource extends Resource
         return Select::make('template_id')
             ->label('Template')
             // Active templates only, plus the one already saved on this document so its label still shows.
-            ->options(fn (?PdfDocument $record) => DocumentTemplate::active()
+            ->options(fn (?PdfDocument $record) => DocumentTemplate::active()->visibleToAdmin()
                 ->when($record?->template_id, fn ($query, $id) => $query->orWhere('id', $id))
                 ->orderBy('name')
                 ->pluck('name', 'id'))
+            ->hidden(fn (): bool => static::singleTemplate() !== null)
             ->placeholder(__('No template'))
             ->helperText(__('Choosing a template replaces the language and images below.'))
             ->live()
             ->columnSpanFull()
             ->afterStateUpdated(function (?string $state, Set $set): void {
-                $template = DocumentTemplate::find($state);
+                $template = DocumentTemplate::visibleToAdmin()->find($state);
 
                 if (! $template) {
                     return;
@@ -110,6 +111,20 @@ class PdfDocumentResource extends Resource
                     $set($field, in_array($field, PdfDocument::IMAGES, true) ? ($value ? [(string) Str::uuid() => $value] : []) : $value);
                 }
             });
+    }
+
+    /** The template applied automatically when a non-super admin has exactly one active template assigned, else null. */
+    public static function singleTemplate(): ?DocumentTemplate
+    {
+        return once(function (): ?DocumentTemplate {
+            if (auth()->user()?->isSuperAdmin()) {
+                return null;
+            }
+
+            $templates = DocumentTemplate::active()->visibleToAdmin()->limit(2)->get();
+
+            return $templates->count() === 1 ? $templates->first() : null;
+        });
     }
 
     /** Shared with templates, which name the first field differently and have no template picker. */
@@ -136,6 +151,8 @@ class PdfDocumentResource extends Resource
                 ]),
             Section::make(__('Images'))
                 ->description(__('All optional. PNG or JPEG. Default signature and stamp come from General settings.'))
+                // Documents only ($withBody): the single assigned template supplies the images. The template form always shows them.
+                ->hidden(fn (): bool => $withBody && static::singleTemplate() !== null)
                 ->columns(3)
                 ->columnSpanFull()
                 ->schema([

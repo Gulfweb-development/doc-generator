@@ -26,14 +26,14 @@ class ListDocuments extends ListRecords
                 ->schema([
                     Select::make('template_id')
                         ->label('Template')
-                        ->options(fn () => DocumentTemplate::active()->orderBy('name')->pluck('name', 'id'))
+                        ->options(fn () => DocumentTemplate::active()->visibleToAdmin()->orderBy('name')->pluck('name', 'id'))
                         ->required(),
                     TextInput::make('title')
                         ->required()
                         ->maxLength(255),
                 ])
                 ->action(function (array $data) {
-                    $template = DocumentTemplate::active()->findOrFail($data['template_id']);
+                    $template = DocumentTemplate::active()->visibleToAdmin()->findOrFail($data['template_id']);
 
                     $document = Document::create([
                         'title' => $data['title'],
