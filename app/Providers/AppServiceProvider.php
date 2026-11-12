@@ -7,6 +7,8 @@ use App\Policies\ActivityPolicy;
 use BezhanSalleh\LanguageSwitch\LanguageSwitch;
 use Filament\Forms\Components\Field;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Support\Assets\Js;
+use Filament\Support\Facades\FilamentAsset;
 use Filament\Tables\Columns\Column;
 use Filament\Tables\Filters\BaseFilter;
 use Illuminate\Support\Facades\Blade;
@@ -24,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Override Cache::rememberForever to handle missing cache table during migrations
         $this->app->booting(function () {
-            if (!Schema::hasTable('cache')) {
+            if (! Schema::hasTable('cache')) {
                 // Temporarily use array cache during migrations
                 config(['cache.default' => 'array']);
             }
@@ -37,6 +39,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Activity::class, ActivityPolicy::class);
+
+        // Font marks for the rich editor, built by npm run build:editor and published by filament:assets.
+        FilamentAsset::register([Js::make('rich-editor-fonts', resource_path('js/dist/rich-editor-fonts.js'))->loadedOnRequest()]);
 
         Column::configureUsing(function (Column $column): void {
             $column->translateLabel();

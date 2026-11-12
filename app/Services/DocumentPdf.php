@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\Models\Document;
+use App\Models\Font;
 use App\Models\PdfDocument;
 use Illuminate\Support\Facades\Storage;
+use Mpdf\Config\ConfigVariables;
+use Mpdf\Config\FontVariables;
 use Mpdf\HTMLParserMode;
 use Mpdf\Mpdf;
 use RuntimeException;
@@ -155,8 +158,24 @@ class DocumentPdf
         $headerMm = $this->bannerHeightMm($images['header_image'] ?? null);
         $footerMm = $this->bannerHeightMm($images['footer_image'] ?? null);
 
+        // Fonts uploaded by super admins, named by the key the editor writes into font-family.
+        $fontdata = (new FontVariables)->getDefaults()['fontdata'] + Font::whereNotNull('file')->get()
+            ->mapWithKeys(fn (Font $font): array => [$font->family => ['R' => basename($font->file), 'useOTL' => 0xFF, 'useKashida' => 75]])
+            ->all();
+        $mpdf = null;
+
         $mpdf = new Mpdf([
             'tempDir' => storage_path('framework/cache/mpdf'),
+            'fontDir' => [...(new ConfigVariables)->getDefaults()['fontDir'], Storage::disk('local')->path('fonts')],
+            'fontdata' => $fontdata,
+            // Uploaded fonts are trusted to have the letters typed in them; of the built-in ones, only mPDF's Arabic fonts.
+            'languageToFont' => new ChosenFontLanguageToFont(
+                // By reference: mPDF only exists once this config has been passed in.
+                function () use (&$mpdf): ?string {
+                    return $mpdf?->FontFamily;
+                },
+                [...Font::whereNotNull('file')->pluck('family'), 'xbriyaz', 'lateef', 'kfgqpcuthmantahanaskh'],
+            ),
             'format' => 'A4',
             'default_font' => 'freeserif',
             'watermark_font' => 'freesans',

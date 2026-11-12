@@ -178,6 +178,8 @@ return [
             \App\Filament\Resources\Users\UserResource::class,
             \App\Filament\Resources\Documents\DocumentResource::class,
             \App\Filament\Resources\DocumentLayouts\DocumentLayoutResource::class,
+            // Super admins only, checked in FontResource::canAccess().
+            \App\Filament\Resources\Fonts\FontResource::class,
         ],
     ],
 

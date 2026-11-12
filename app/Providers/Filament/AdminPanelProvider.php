@@ -4,7 +4,9 @@ namespace App\Providers\Filament;
 
 use AchyutN\FilamentLogViewer\FilamentLogViewer;
 use App\Http\Controllers\DocumentPdfController;
+use App\Http\Controllers\FontFileController;
 use App\Http\Controllers\PdfDocumentPdfController;
+use App\Models\Font;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -87,7 +89,10 @@ class AdminPanelProvider extends PanelProvider
             ->authenticatedRoutes(function (): void {
                 Route::get('documents/{document}/pdf', DocumentPdfController::class)->name('documents.pdf');
                 Route::get('pdf-documents/{pdfDocument}/pdf', PdfDocumentPdfController::class)->name('pdf-documents.pdf');
+                Route::get('fonts/{font}', FontFileController::class)->name('fonts.file');
             })
+            // Editor fonts, so text shows in the font the PDF will use.
+            ->renderHook(PanelsRenderHook::HEAD_END, fn (): string => auth()->check() ? Font::all()->map(fn (Font $font): string => sprintf('<style>@font-face { font-family: %s; src: url("%s") format("truetype"); }</style>', $font->family, e(route('filament.admin.fonts.file', $font))))->implode('') : '')
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_BEFORE, fn (): string => view('components/developer-login')->render())
             ->authMiddleware([
                 Authenticate::class,

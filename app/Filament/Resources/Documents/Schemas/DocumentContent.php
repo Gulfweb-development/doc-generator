@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Documents\Schemas;
 
+use App\Filament\RichEditor\FontPlugin;
 use App\Models\DocumentLayout;
 use Filament\Forms\Components\FileUpload;
 use Filament\Forms\Components\Radio;
@@ -55,6 +56,7 @@ class DocumentContent
         return RichEditor::make($name)
             // PDF images come only from the logo, signature and stamp fields.
             ->disableToolbarButtons(['attachFiles'])
+            ->plugins([FontPlugin::make()])
             ->extraInputAttributes(['dir' => 'auto']);
     }
 
